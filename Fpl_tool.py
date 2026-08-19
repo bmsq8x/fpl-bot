@@ -724,4 +724,4 @@ if gemini_key:
                 st.warning("ادخل القرارات أولاً.")
 
 else:
-    st.info("الرجاء إدخال مفتاح Gemini API للبدء."
+    st.info("الرجاء إدخال مفتاح Gemini API للبدء.")
