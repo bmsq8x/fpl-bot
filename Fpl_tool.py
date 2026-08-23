@@ -112,10 +112,13 @@ def fetch_live_fpl_data():
     news = [f"- {p['web_name']} ({teams.get(p['team'])}): {p['news']}" for p in data.get('elements', []) if p.get('news')][:15]
     return "=== أحدث الإصابات والأخبار ===\n" + "\n".join(news)
 
-# 4. توجيهات الذكاء الاصطناعي والدالة الموحدة المحدثة مع حل مشكلة NotFound
+# 4. توجيهات الذكاء الاصطناعي والدالة الموحدة مع جلب النماذج ديناميكياً
 SYSTEM_INSTRUCTION = f"أنت خبير فانتسي الدوري الإنجليزي (FPL) لموسم 2026/2027. تاريخ اليوم: {datetime.date.today()}."
 
 def run_fpl_ai(api_key, prompt, images=None):
+    if not api_key:
+        raise Exception("يرجى إدخال مفتاح Gemini API أولاً في الشريط الجانبي.")
+        
     genai.configure(api_key=api_key)
     live_context = fetch_live_fpl_data()
     full_prompt = f"{SYSTEM_INSTRUCTION}\n\n[المستجدات الحية]:\n{live_context}\n\n[الطلب]:\n{prompt}"
@@ -124,11 +127,20 @@ def run_fpl_ai(api_key, prompt, images=None):
     if images:
         contents.extend(images if isinstance(images, list) else [images])
 
-    # تجربة قائمة بالنماذج المتاحة لتفادي خطأ NotFound
-    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'gemini-pro']
-    last_error = None
+    # البحث عن النماذج المتاحة لمفتاح API الخاص بك ديناميكياً
+    candidates = []
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                candidates.append(m.name)
+    except Exception as e:
+        pass
 
-    for m_name in candidate_models:
+    if not candidates:
+        candidates = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+
+    last_error = None
+    for m_name in candidates:
         try:
             model = genai.GenerativeModel(m_name)
             res = model.generate_content(contents)
@@ -137,7 +149,7 @@ def run_fpl_ai(api_key, prompt, images=None):
             last_error = e
             continue
             
-    raise Exception(f"تعذر الاتصال بـ Gemini API. الخطأ: {last_error}")
+    raise Exception(f"فشل الاتصال بـ Gemini API. السبب: {last_error}")
 
 def render_ai_section(title, btn_text, prompt_text, desc=""):
     st.header(title)
@@ -147,7 +159,7 @@ def render_ai_section(title, btn_text, prompt_text, desc=""):
             try:
                 st.markdown(run_fpl_ai(gemini_key, prompt_text))
             except Exception as e:
-                st.error(f"خطأ: {e}")
+                st.error(f"⚠️ {e}")
 
 # 5. الشريط الجانبي والرأس
 with st.sidebar:
@@ -193,12 +205,18 @@ if gemini_key:
                         """, unsafe_allow_html=True)
                         
                         prompt = f"حلل التشكيلة القادمة وقيمها من 100 واقترح الكابتن والبدلاء وأضف في النهاية قسماً باسم '📲 **ملخص سريع للواتساب (قابل للنسخ):**' بـ 3 أسطر فقط:\n{squad_txt}"
-                        st.markdown(run_fpl_ai(gemini_key, prompt))
+                        try:
+                            st.markdown(run_fpl_ai(gemini_key, prompt))
+                        except Exception as e:
+                            st.error(f"⚠️ {e}")
         else:
             up_file = st.file_uploader("ارفع لقطة الشاشة:", type=["png", "jpg", "jpeg"])
             if up_file and st.button("🚀 بدء التحليل من الصورة"):
                 with st.spinner("جاري تحليل الصورة..."):
-                    st.markdown(run_fpl_ai(gemini_key, "اقرأ التشكيلة من الصورة وقدم تقريراً شاملاً وملخص للواتساب.", Image.open(up_file)))
+                    try:
+                        st.markdown(run_fpl_ai(gemini_key, "اقرأ التشكيلة من الصورة وقدم تقريراً شاملاً وملخص للواتساب.", Image.open(up_file)))
+                    except Exception as e:
+                        st.error(f"⚠️ {e}")
 
     elif page == "🏆 حاسبة الدوري الخاص":
         st.header("🏆 تحليل وتكنيك التفوق في الدوري الخاص")
@@ -209,7 +227,10 @@ if gemini_key:
                 if err: st.error(err)
                 else:
                     st.text_area("📋 ترتيب الدوري:", l_summary, height=150)
-                    st.markdown(run_fpl_ai(gemini_key, f"بناءً على الترتيب التالي قدم استراتيجية لتجاوز المنافسين:\n{l_summary}"))
+                    try:
+                        st.markdown(run_fpl_ai(gemini_key, f"بناءً على الترتيب التالي قدم استراتيجية لتجاوز المنافسين:\n{l_summary}"))
+                    except Exception as e:
+                        st.error(f"⚠️ {e}")
 
     elif page == "🃏 مخطط الـ Wildcard":
         st.header("🃏 بناء تشكيلة الـ Wildcard")
@@ -217,7 +238,10 @@ if gemini_key:
         bg = c1.number_input("💰 الميزانية (£M):", value=100.0)
         st_style = c2.selectbox("🎯 الأسلوب:", ["متوازنة", "هجوم ناري", "دفاع صلب", "Differential"])
         if st.button("✨ بناء التشكيلة المثالية"):
-            st.markdown(run_fpl_ai(gemini_key, f"ابن تشكيلة Wildcard كاملة بميزانية {bg}M بأسلوب {st_style}."))
+            try:
+                st.markdown(run_fpl_ai(gemini_key, f"ابن تشكيلة Wildcard كاملة بميزانية {bg}M بأسلوب {st_style}."))
+            except Exception as e:
+                st.error(f"⚠️ {e}")
 
     elif page == "💬 المساعد الصوتي والدردشة":
         st.header("🎙️ الدردشة والاستفسارات المباشرة")
@@ -228,9 +252,12 @@ if gemini_key:
             st.session_state.msgs.append({"role": "user", "content": p})
             with st.chat_message("user"): st.markdown(p)
             with st.chat_message("assistant"):
-                ans = run_fpl_ai(gemini_key, p)
-                st.markdown(ans)
-                st.session_state.msgs.append({"role": "assistant", "content": ans})
+                try:
+                    ans = run_fpl_ai(gemini_key, p)
+                    st.markdown(ans)
+                    st.session_state.msgs.append({"role": "assistant", "content": ans})
+                except Exception as e:
+                    st.error(f"⚠️ {e}")
 
     elif page == "⚔️ مقارنة التشكيلات (H2H)":
         st.header("⚔️ مقارنة تشكيلة الخصم")
@@ -238,9 +265,11 @@ if gemini_key:
         f1 = c1.file_uploader("تشكليتك", type=["png", "jpg"], key="1")
         f2 = c2.file_uploader("تشكيلة الخصم", type=["png", "jpg"], key="2")
         if f1 and f2 and st.button("🔍 مقارنة التشكيلتين"):
-            st.markdown(run_fpl_ai(gemini_key, "قارن بين التشكيلتين واكشف نقاط التفوق لكل فريق.", [Image.open(f1), Image.open(f2)]))
+            try:
+                st.markdown(run_fpl_ai(gemini_key, "قارن بين التشكيلتين واكشف نقاط التفوق لكل فريق.", [Image.open(f1), Image.open(f2)]))
+            except Exception as e:
+                st.error(f"⚠️ {e}")
 
-    # أقسام سريعة منفذة عبر الدالة الموحدة render_ai_section
     elif page == "🎲 رادار المداورة (xMins)":
         render_ai_section("🎲 رادار خطر المداورة", "🔍 فحص المداورة", "قدم تحليلاً في جداول لرادار المداورة (xMins) للاعبي الفرق الكبرى.")
     elif page == "🃏 مخطط الخصائص (Chips)":
@@ -262,6 +291,9 @@ if gemini_key:
     elif page == "📜 سجل وتقييم القرارات":
         u_log = st.text_area("✍️ ادخل قراراتك الأخيرة:")
         if st.button("🧐 تقييم القرارات") and u_log:
-            st.markdown(run_fpl_ai(gemini_key, f"قيم القرارات التالية واذكر الإيجابيات والسلبيات: {u_log}"))
+            try:
+                st.markdown(run_fpl_ai(gemini_key, f"قيم القرارات التالية واذكر الإيجابيات والسلبيات: {u_log}"))
+            except Exception as e:
+                st.error(f"⚠️ {e}")
 else:
     st.info("الرجاء إدخال مفتاح Gemini API للبدء.")
