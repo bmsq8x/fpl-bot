@@ -107,10 +107,20 @@ def fetch_private_league_data(league_id):
 @st.cache_data(ttl=3600)
 def fetch_live_fpl_data():
     data = get_json("https://fantasy.premierleague.com/api/bootstrap-static/")
-    if not data: return "بيانات حية محدودة."
+    if not data: 
+        return "بيانات حية محدودة."
+    
     teams = {t['id']: t['name'] for t in data.get('teams', [])}
-    news = [f"- {p['web_name']} ({teams.get(p['team'])}): {p['news']}" for p in data.get('elements', []) if p.get('news')][:15]
-    return "=== أحدث الإصابات والأخبار ===\n" + "\n".join(news)
+    players = data.get('elements', [])
+    
+    # 1. جلب قائمة الإصابات والأخبار
+    news = [f"- {p['web_name']} ({teams.get(p['team'])}): {p['news']}" for p in players if p.get('news')][:15]
+    
+    # 2. ربط أبرز اللاعبين بفرقهم الحالية رسمياً لمنع التخمين
+    top_players = sorted(players, key=lambda x: float(x.get('selected_by_percent', 0)), reverse=True)[:40]
+    roster_mapping = [f"- {p['web_name']} (يلعب حالياً مع: {teams.get(p['team'])})" for p in top_players]
+    
+    return "=== أحدث الإصابات والأخبار ===\n" + "\n".join(news) + "\n\n=== قائمة الأندية الرسمية المحدثة للاعبين ===\n" + "\n".join(roster_mapping)
 
 # 4. توجيهات الذكاء الاصطناعي والدالة الموحدة مع جلب النماذج ديناميكياً
 SYSTEM_INSTRUCTION = f"أنت خبير فانتسي الدوري الإنجليزي (FPL) لموسم 2026/2027. تاريخ اليوم: {datetime.date.today()}."
