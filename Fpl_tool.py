@@ -112,7 +112,7 @@ def fetch_live_fpl_data():
     news = [f"- {p['web_name']} ({teams.get(p['team'])}): {p['news']}" for p in data.get('elements', []) if p.get('news')][:15]
     return "=== أحدث الإصابات والأخبار ===\n" + "\n".join(news)
 
-# 4. توجيهات الذكاء الاصطناعي والدالة الموحدة
+# 4. توجيهات الذكاء الاصطناعي والدالة الموحدة المحدثة مع حل مشكلة NotFound
 SYSTEM_INSTRUCTION = f"أنت خبير فانتسي الدوري الإنجليزي (FPL) لموسم 2026/2027. تاريخ اليوم: {datetime.date.today()}."
 
 def run_fpl_ai(api_key, prompt, images=None):
@@ -124,8 +124,20 @@ def run_fpl_ai(api_key, prompt, images=None):
     if images:
         contents.extend(images if isinstance(images, list) else [images])
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    return model.generate_content(contents).text
+    # تجربة قائمة بالنماذج المتاحة لتفادي خطأ NotFound
+    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'gemini-pro']
+    last_error = None
+
+    for m_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(m_name)
+            res = model.generate_content(contents)
+            return res.text
+        except Exception as e:
+            last_error = e
+            continue
+            
+    raise Exception(f"تعذر الاتصال بـ Gemini API. الخطأ: {last_error}")
 
 def render_ai_section(title, btn_text, prompt_text, desc=""):
     st.header(title)
@@ -226,7 +238,7 @@ if gemini_key:
         f1 = c1.file_uploader("تشكليتك", type=["png", "jpg"], key="1")
         f2 = c2.file_uploader("تشكيلة الخصم", type=["png", "jpg"], key="2")
         if f1 and f2 and st.button("🔍 مقارنة التشكيلتين"):
-            st.markdown(run_fpl_ai(gemini_key, " قارن بين التشكيلتين واكشف نقاط التفوق لكل فريق.", [Image.open(f1), Image.open(f2)]))
+            st.markdown(run_fpl_ai(gemini_key, "قارن بين التشكيلتين واكشف نقاط التفوق لكل فريق.", [Image.open(f1), Image.open(f2)]))
 
     # أقسام سريعة منفذة عبر الدالة الموحدة render_ai_section
     elif page == "🎲 رادار المداورة (xMins)":
