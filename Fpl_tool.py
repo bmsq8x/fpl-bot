@@ -1,44 +1,49 @@
-import streamlit as st
-import google.generativeai as genai
-from PIL import Image
-import requests
 import datetime
 import os
+from PIL import Image
+import google.generativeai as genai
+import requests
+import streamlit as st
+
 # 1. إعدادات الصفحة والتصميم البصري (CSS)
-st.set_page_config(page_title="مدير الفانتسي الذكي 2026/2027", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="مدير الفانتسي الذكي 2026/2027",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-st.markdown("""
+st.markdown(
+    """
 <style>
-    .stApp { background-color: #0d0118; color: #ffffff; }
-    div.stButton > button {
-        background: linear-gradient(135deg, #00ff87 0%, #02efff 100%);
-        color: #37003c !important; font-weight: bold !important; font-size: 16px !important;
-        border-radius: 12px !important; border: none !important; padding: 10px 24px !important;
-        transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0, 255, 135, 0.3);
-    }
-    div.stButton > button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 255, 135, 0.5); }
-    section[data-testid="stSidebar"] { background-color: #1a002c !important; border-right: 1px solid #37003c; }
-    .stTextInput input, .stSelectbox select, .stNumberInput input, .stTextArea textarea {
-        background-color: #240038 !important; color: #ffffff !important; border: 1px solid #00ff87 !important; border-radius: 8px !important;
-    }
-    .pitch-container {
-        background: linear-gradient(180deg, #1e7145 0%, #114b2d 100%);
-        border: 2px solid #00ff87; border-radius: 15px; padding: 20px 10px; margin-bottom: 15px;
-    }
-    .pitch-row { display: flex; justify-content: space-evenly; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
-    .player-card {
-        background: rgba(36, 0, 56, 0.95); color: #ffffff; border: 1px solid #00ff87;
-        padding: 6px 10px; border-radius: 8px; text-align: center; font-size: 12px; font-weight: bold; min-width: 90px; margin: 3px;
-    }
-    .player-card span { display: block; font-size: 10px; color: #00ff87; font-weight: normal; }
-    .bench-container {
-        background-color: #1a002c; padding: 12px; border-radius: 12px; display: flex;
-        justify-content: space-evenly; border: 1px solid #37003c; flex-wrap: wrap; margin-bottom: 20px;
-    }
+.stApp { background-color: #0d0118; color: #ffffff; }
+div.stButton > button {
+    background: linear-gradient(135deg, #00ff87 0%, #02efff 100%);
+    color: #37003c !important; font-weight: bold !important; font-size: 16px !important;
+    border-radius: 12px !important; border: none !important; padding: 10px 24px !important;
+    transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0, 255, 135, 0.3);
+}
+div.stButton > button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 255, 135, 0.5); }
+section[data-testid="stSidebar"] { background-color: #1a002c !important; border-right: 1px solid #37003c; }
+.stTextInput input, .stSelectbox select, .stNumberInput input, .stTextArea textarea {
+    background-color: #240038 !important; color: #ffffff !important; border: 1px solid #00ff87 !important; border-radius: 8px;
+}
+.pitch-container {
+    background: linear-gradient(180deg, #1e7145 0%, #114b2d 100%);
+    border: 2px solid #00ff87; border-radius: 15px; padding: 20px 10px; margin-bottom: 15px;
+}
+.pitch-row { display: flex; justify-content: space-evenly; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+.player-card {
+    background: rgba(36, 0, 56, 0.95); color: #ffffff; border: 1px solid #00ff87;
+    padding: 6px 10px; border-radius: 8px; text-align: center; font-size: 12px; min-width: 75px;
+}
+.player-card span { display: block; font-size: 10px; color: #00ff87; font-weight: bold; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# 2. الحفظ التلقائي للمفاتيح (دعم Railway و Streamlit)
+
+# 2. الحفظ التلقائي للمفاتيح (دعم Railway و Streamlit Secrets)
 def get_secret(key_name, default=""):
     if key_name in os.environ:
         return os.environ[key_name]
@@ -49,271 +54,279 @@ def get_secret(key_name, default=""):
         pass
     return default
 
+
 secrets_gemini = get_secret("GEMINI_API_KEY") or get_secret("gemini_key")
 secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 
-# 3. وظائف جلب البيانات المباشرة
+# 3. القائمة الجانبية (Sidebar)
+with st.sidebar:
+    st.title("⚙️ الإعدادات والربط")
+    user_gemini_key = st.text_input(
+        "مفتاح Gemini API:",
+        value=secrets_gemini,
+        type="password",
+        help="المفتاح مفعل تلقائياً من الإعدادات",
+    )
+    user_fpl_id = st.text_input(
+        "معرف فريقك (FPL Team ID):",
+        value=secrets_fpl_id,
+        placeholder="مثال: 3427112",
+    )
+
+    if user_gemini_key:
+        secrets_gemini = user_gemini_key
+    if user_fpl_id:
+        secrets_fpl_id = user_fpl_id
+
+    st.markdown("---")
+    st.caption("تغطية حية لموسم 2026/2027 ⚽")
+
+# 4. إعداد واستدعاء الذكاء الاصطناعي (Gemini)
+if secrets_gemini:
+    try:
+        genai.configure(api_key=secrets_gemini)
+    except Exception:
+        pass
+
+
+def ask_gemini(prompt_text):
+    if not secrets_gemini:
+        return "⚠️ يرجى إدخال مفتاح Gemini API في القائمة الجانبية أو في متغيرات Railway."
+
+    for model_name in [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+    ]:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt_text)
+            if response and response.text:
+                return response.text
+        except Exception:
+            continue
+
+    return "⚠️ تعذر الحصول على رد من الذكاء الاصطناعي، يرجى التأكد من صلاحيات المفتاح."
+
+
+# 5. وظائف جلب البيانات المباشرة من FPL API
 def get_json(url):
     try:
         res = requests.get(url, timeout=8)
         return res.json() if res.status_code == 200 else None
-    except:
+    except Exception:
         return None
 
-@st.cache_data(ttl=3600)
-def fetch_manager_squad(manager_id):
-    static_data = get_json("https://fantasy.premierleague.com/api/bootstrap-static/")
-    if not static_data:
-        return None, None, "تعذر جلب بيانات الفانتسي العامة."
-        
-    players = {p['id']: p for p in static_data['elements']}
-    teams = {t['id']: t['name'] for t in static_data['teams']}
-    types = {et['id']: et['singular_name_short'] for et in static_data['element_types']}
-
-    current_gw = next((ev['id'] for ev in static_data.get('events', []) if ev.get('is_current')), 1)
-    
-    mdata = get_json(f"https://fantasy.premierleague.com/api/entry/{manager_id}/") or {}
-    mgr_info = f"الفريق: {mdata.get('name', '')} | النقاط: {mdata.get('summary_overall_points', 0)} | الترتيب: {mdata.get('summary_overall_rank', 0)}"
-
-    picks_data = get_json(f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{current_gw}/picks/")
-    if not picks_data:
-        return None, None, f"لم يتم العثور على تشكيلة للمعرف {manager_id}."
-
-    bank = picks_data.get('entry_history', {}).get('bank', 0) / 10.0
-    value = picks_data.get('entry_history', {}).get('value', 0) / 10.0
-
-    starting_11, bench = [], []
-    parsed_squad = {'GKP': [], 'DEF': [], 'MID': [], 'FWD': [], 'Bench': []}
-
-    for p in picks_data.get('picks', []):
-        pinfo = players.get(p['element'], {})
-        pname, tname = pinfo.get('web_name', 'Unknown'), teams.get(pinfo.get('team'), '')
-        ptype = types.get(pinfo.get('element_type'), 'MID')
-        cost = pinfo.get('now_cost', 0) / 10.0
-        role = " 👑 (C)" if p.get('is_captain') else (" 🛡️ (VC)" if p.get('is_vice_captain') else "")
-
-        line = f"- {pname} ({tname}) | المركز: {ptype} | السعر: £{cost}M{role}"
-        card_html = f"<div class='player-card'>{pname}{role}<span>{tname} (£{cost}M)</span></div>"
-
-        if p['position'] <= 11:
-            starting_11.append(line)
-            parsed_squad.get(ptype, parsed_squad['MID']).append(card_html)
-        else:
-            bench.append(line)
-            parsed_squad['Bench'].append(card_html)
-
-    squad_summary = f"=== بيانات الحساب ({manager_id}) ===\n{mgr_info}\nالميزانية: £{bank}M | القيمة: £{value}M\n\n=== التشكيلة الأساسية ===\n" + "\n".join(starting_11) + "\n\n=== البدلاء ===\n" + "\n".join(bench)
-    return squad_summary, parsed_squad, None
-
-@st.cache_data(ttl=1800)
-def fetch_private_league_data(league_id):
-    data = get_json(f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/")
-    if data:
-        name = data.get('league', {}).get('name', 'الدوري الخاص')
-        standings = [f"- المرتبة {m.get('rank')}: {m.get('entry_name')} ({m.get('player_name')}) | النقاط: {m.get('total')}" for m in data.get('standings', {}).get('results', [])[:10]]
-        return f"=== بيانات دوري: {name} ===\n" + "\n".join(standings), None
-    return None, "تعذر الوصول لبيانات الدوري."
 
 @st.cache_data(ttl=3600)
 def fetch_live_fpl_data():
-    data = get_json("https://fantasy.premierleague.com/api/bootstrap-static/")
-    if not data: 
-        return "بيانات حية محدودة."
-    
-    teams = {t['id']: t['name'] for t in data.get('teams', [])}
-    players = data.get('elements', [])
-    
-    # 1. جلب قائمة الإصابات والأخبار
-    news = [f"- {p['web_name']} ({teams.get(p['team'])}): {p['news']}" for p in players if p.get('news')][:15]
-    
-    # 2. ربط أبرز اللاعبين بفرقهم الحالية رسمياً لمنع التخمين
-    top_players = sorted(players, key=lambda x: float(x.get('selected_by_percent', 0)), reverse=True)[:40]
-    roster_mapping = [f"- {p['web_name']} (يلعب حالياً مع: {teams.get(p['team'])})" for p in top_players]
-    
-    return "=== أحدث الإصابات والأخبار ===\n" + "\n".join(news) + "\n\n=== قائمة الأندية الرسمية المحدثة للاعبين ===\n" + "\n".join(roster_mapping)
+    static_data = get_json(
+        "https://fantasy.premierleague.com/api/bootstrap-static/"
+    )
+    if not static_data:
+        return None, None, None
+    players = {p["id"]: p for p in static_data["elements"]}
+    teams = {t["id"]: t["name"] for t in static_data["teams"]}
+    types = {
+        et["id"]: et["singular_name_short"]
+        for et in static_data["element_types"]
+    }
+    return players, teams, types
 
-# 4. توجيهات الذكاء الاصطناعي والدالة الموحدة مع جلب النماذج ديناميكياً
-SYSTEM_INSTRUCTION = f"أنت خبير فانتسي الدوري الإنجليزي (FPL) لموسم 2026/2027. تاريخ اليوم: {datetime.date.today()}."
 
-def run_fpl_ai(api_key, prompt, images=None):
-    if not api_key:
-        raise Exception("يرجى إدخال مفتاح Gemini API أولاً في الشريط الجانبي.")
-        
-    genai.configure(api_key=api_key)
-    live_context = fetch_live_fpl_data()
-    full_prompt = f"{SYSTEM_INSTRUCTION}\n\n[المستجدات الحية]:\n{live_context}\n\n[الطلب]:\n{prompt}"
-    
-    contents = [full_prompt]
-    if images:
-        contents.extend(images if isinstance(images, list) else [images])
+def fetch_manager_squad(manager_id):
+    players, teams, types = fetch_live_fpl_data()
+    if not players:
+        return None, "تعذر جلب بيانات الفانتسي العامة حالياً."
 
-    # البحث عن النماذج المتاحة لمفتاح API الخاص بك ديناميكياً
-    candidates = []
-    try:
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                candidates.append(m.name)
-    except Exception as e:
-        pass
+    entry_data = get_json(
+        f"https://fantasy.premierleague.com/api/entry/{manager_id}/"
+    )
+    if not entry_data:
+        return None, "رقم الفريق غير صحيح أو يتعذر الوصول له."
 
-    if not candidates:
-        candidates = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+    current_gw = entry_data.get("current_event", 1)
+    picks_data = get_json(
+        f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{current_gw}/picks/"
+    )
+    if not picks_data:
+        return None, "تعذر جلب تشكيلة الجولة الحالية."
 
-    last_error = None
-    for m_name in candidates:
-        try:
-            model = genai.GenerativeModel(m_name)
-            res = model.generate_content(contents)
-            return res.text
-        except Exception as e:
-            last_error = e
-            continue
-            
-    raise Exception(f"فشل الاتصال بـ Gemini API. السبب: {last_error}")
+    squad = []
+    for pick in picks_data.get("picks", []):
+        p_info = players.get(pick["element"], {})
+        squad.append({
+            "name": p_info.get("web_name", "لاعب"),
+            "team": teams.get(p_info.get("team"), ""),
+            "pos": types.get(p_info.get("element_type"), "GKP"),
+            "is_captain": pick.get("is_captain", False),
+            "is_vice": pick.get("is_vice_captain", False),
+            "position": pick.get("position", 1),
+        })
+    return squad, None
 
-def render_ai_section(title, btn_text, prompt_text, desc=""):
-    st.header(title)
-    if desc: st.write(desc)
-    if st.button(btn_text):
-        with st.spinner("جاري التحليل..."):
-            try:
-                st.markdown(run_fpl_ai(gemini_key, prompt_text))
-            except Exception as e:
-                st.error(f"⚠️ {e}")
 
-# 5. الشريط الجانبي والرأس
-with st.sidebar:
-    st.header("⚙️ الإعدادات والربط")
-    gemini_key = st.text_input("مفتاح Gemini API:", value=secrets_gemini, type="password") or secrets_gemini
-    saved_fpl_id = st.text_input("معرف فريقك (FPL Team ID):", value=secrets_fpl_id) or secrets_fpl_id
-    st.caption("تغطية حية لموسم 2026/2027")
-
-st.markdown("<h1 style='text-align: center; color: #FF1A1A;'>( حميدي مطلق ما تفوز علي )</h1>", unsafe_allow_html=True)
+# 6. الواجهة الرئيسية والتنقل (مخففة ومسرعة)
 st.title("⚽ بوت الفانتسي الذكي المباشر")
-st.markdown("---")
 
-# 6. التوجيه وأقسام البوت
-if gemini_key:
-    page = st.selectbox("📌 اختر القسم المطلوب:", [
-        "📊 تحليل التشكيلة والتقرير اليومي", "🎲 رادار المداورة (xMins)", "🃏 مخطط الخصائص (Chips)",
-        "🛡️ مؤشر الملكية المؤثرة (EO)", "🏆 حاسبة الدوري الخاص", "📅 مخطط التبديلات الـ 3 القادمة",
-        "🔥 رادار الدرافتات (3 أيام)", "🎙️ رادار المؤتمرات والإصابات", "🃏 مخطط الـ Wildcard",
-        "📈 رادار الأسعار", "💬 المساعد الصوتي والدردشة", "⚔️ مقارنة التشكيلات (H2H)", 
-        "👑 مصفوفة الكابتن", "🎯 استراتيجيات المغامرة", "📜 سجل وتقييم القرارات"
-    ])
-    st.markdown("---")
+category = st.selectbox(
+    "اختر القسم المطلوب 📍",
+    [
+        "💬 المساعد الصوتي والدردشة",
+        "📊 تحليل التشكيلة والتقرير اليومي",
+        "🛡️ (EO) مؤشر الملكية المؤثرة",
+        "🎯 (Chips) مخطط الخصائص",
+        "🚨 مخطط التهديدات الـ 3 القادمة",
+        "🚑 رادار الإصابات والغيابات",
+        "👑 مصفوفة الكابتن",
+    ],
+)
 
-    if page == "📊 تحليل التشكيلة والتقرير اليومي":
-        st.header("📊 تحليل التشكيلة وتوقع النقاط")
-        method = st.radio("اختر طريقة الإدخال:", ["🔗 جلب تلقائي عبر ID", "📸 رفع صورة"])
-        
-        if method == "🔗 جلب تلقائي عبر ID":
-            fpl_id_in = st.text_input("رقم FPL ID:", value=saved_fpl_id)
-            if st.button("🚀 جلب وتحليل التشكيلة") and fpl_id_in:
-                with st.spinner("جاري الجلب والتحليل..."):
-                    squad_txt, parsed_squad, err = fetch_manager_squad(fpl_id_in)
-                    if err: st.error(err)
-                    else:
-                        st.markdown(f"""
-                        <div class="pitch-container">
-                            <div class="pitch-row">{''.join(parsed_squad['FWD'])}</div>
-                            <div class="pitch-row">{''.join(parsed_squad['MID'])}</div>
-                            <div class="pitch-row">{''.join(parsed_squad['DEF'])}</div>
-                            <div class="pitch-row">{''.join(parsed_squad['GKP'])}</div>
-                        </div>
-                        <div class="bench-container"><strong style="color:#00ff87;">الدكة:</strong>{''.join(parsed_squad['Bench'])}</div>
-                        """, unsafe_allow_html=True)
-                        
-                        prompt = f"حلل التشكيلة القادمة وقيمها من 100 واقترح الكابتن والبدلاء وأضف في النهاية قسماً باسم '📲 **ملخص سريع للواتساب (قابل للنسخ):**' بـ 3 أسطر فقط:\n{squad_txt}"
-                        try:
-                            st.markdown(run_fpl_ai(gemini_key, prompt))
-                        except Exception as e:
-                            st.error(f"⚠️ {e}")
-        else:
-            up_file = st.file_uploader("ارفع لقطة الشاشة:", type=["png", "jpg", "jpeg"])
-            if up_file and st.button("🚀 بدء التحليل من الصورة"):
-                with st.spinner("جاري تحليل الصورة..."):
-                    try:
-                        st.markdown(run_fpl_ai(gemini_key, "اقرأ التشكيلة من الصورة وقدم تقريراً شاملاً وملخص للواتساب.", Image.open(up_file)))
-                    except Exception as e:
-                        st.error(f"⚠️ {e}")
+# ---------------------------------------------------------
+# القسم الأول: المساعد الصوتي والدردشة
+# ---------------------------------------------------------
+if category == "💬 المساعد الصوتي والدردشة":
+    st.header("🗣️ الدردشة والاستفسارات المباشرة")
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    elif page == "🏆 حاسبة الدوري الخاص":
-        st.header("🏆 تحليل وتكنيك التفوق في الدوري الخاص")
-        l_id = st.text_input("رقم ID الدوري الخاص:")
-        if st.button("🔍 تحليل الدوري") and l_id:
-            with st.spinner("جاري السحب والتحليل..."):
-                l_summary, err = fetch_private_league_data(l_id)
-                if err: st.error(err)
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    user_query = st.chat_input("اسأل عن أي لاعب، مؤتمر، أو تبديل...")
+    if user_query:
+        st.session_state.messages.append(
+            {"role": "user", "content": user_query}
+        )
+        with st.chat_message("user"):
+            st.write(user_query)
+
+        with st.chat_message("assistant"):
+            with st.spinner("جاري التفكير..."):
+                answer = ask_gemini(
+                    f"بصفتك خبير فانتسي البريميرليج، أجب باختصار واحترافية: {user_query}"
+                )
+                st.write(answer)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer}
+                )
+
+# ---------------------------------------------------------
+# القسم الثاني: تحليل التشكيلة والتقرير اليومي
+# ---------------------------------------------------------
+elif category == "📊 تحليل التشكيلة والتقرير اليومي":
+    st.header("📊 تحليل التشكيلة وحالة الفريق")
+
+    if not secrets_fpl_id:
+        st.warning("⚠️ يرجى أدخال رقم FPL Team ID في القائمة الجانبية.")
+    else:
+        if st.button("🚀 جلب وتحليل التشكيلة بـ ID"):
+            with st.spinner("جاري جلب البيانات ورسم الملعب..."):
+                squad, err = fetch_manager_squad(secrets_fpl_id)
+                if err:
+                    st.error(err)
                 else:
-                    st.text_area("📋 ترتيب الدوري:", l_summary, height=150)
-                    try:
-                        st.markdown(run_fpl_ai(gemini_key, f"بناءً على الترتيب التالي قدم استراتيجية لتجاوز المنافسين:\n{l_summary}"))
-                    except Exception as e:
-                        st.error(f"⚠️ {e}")
+                    st.subheader("🟢 التشكيلة الأساسية على الملعب")
 
-    elif page == "🃏 مخطط الـ Wildcard":
-        st.header("🃏 بناء تشكيلة الـ Wildcard")
-        c1, c2 = st.columns(2)
-        bg = c1.number_input("💰 الميزانية (£M):", value=100.0)
-        st_style = c2.selectbox("🎯 الأسلوب:", ["متوازنة", "هجوم ناري", "دفاع صلب", "Differential"])
-        if st.button("✨ بناء التشكيلة المثالية"):
-            try:
-                st.markdown(run_fpl_ai(gemini_key, f"ابن تشكيلة Wildcard كاملة بميزانية {bg}M بأسلوب {st_style}."))
-            except Exception as e:
-                st.error(f"⚠️ {e}")
+                    # تقسيم اللاعبين أساسيين وبدلاء
+                    starting_11 = [p for p in squad if p["position"] <= 11]
+                    bench = [p for p in squad if p["position"] > 11]
 
-    elif page == "💬 المساعد الصوتي والدردشة":
-        st.header("🎙️ الدردشة والاستفسارات المباشرة")
-        if "msgs" not in st.session_state: st.session_state.msgs = []
-        for m in st.session_state.msgs:
-            with st.chat_message(m["role"]): st.markdown(m["content"])
-        if p := st.chat_input("اسأل عن أي لاعب، مؤتمر، أو تبديل..."):
-            st.session_state.msgs.append({"role": "user", "content": p})
-            with st.chat_message("user"): st.markdown(p)
-            with st.chat_message("assistant"):
-                try:
-                    ans = run_fpl_ai(gemini_key, p)
-                    st.markdown(ans)
-                    st.session_state.msgs.append({"role": "assistant", "content": ans})
-                except Exception as e:
-                    st.error(f"⚠️ {e}")
+                    gk = [p for p in starting_11 if p["pos"] == "GKP"]
+                    defenders = [p for p in starting_11 if p["pos"] == "DEF"]
+                    midfielders = [
+                        p for p in starting_11 if p["pos"] == "MID"
+                    ]
+                    forwards = [p for p in starting_11 if p["pos"] == "FWD"]
 
-    elif page == "⚔️ مقارنة التشكيلات (H2H)":
-        st.header("⚔️ مقارنة تشكيلة الخصم")
-        c1, c2 = st.columns(2)
-        f1 = c1.file_uploader("تشكليتك", type=["png", "jpg"], key="1")
-        f2 = c2.file_uploader("تشكيلة الخصم", type=["png", "jpg"], key="2")
-        if f1 and f2 and st.button("🔍 مقارنة التشكيلتين"):
-            try:
-                st.markdown(run_fpl_ai(gemini_key, "قارن بين التشكيلتين واكشف نقاط التفوق لكل فريق.", [Image.open(f1), Image.open(f2)]))
-            except Exception as e:
-                st.error(f"⚠️ {e}")
+                    # رسم الملعب
+                    st.markdown(
+                        '<div class="pitch-container">', unsafe_allow_html=True
+                    )
 
-    elif page == "🎲 رادار المداورة (xMins)":
-        render_ai_section("🎲 رادار خطر المداورة", "🔍 فحص المداورة", "قدم تحليلاً في جداول لرادار المداورة (xMins) للاعبي الفرق الكبرى.")
-    elif page == "🃏 مخطط الخصائص (Chips)":
-        render_ai_section("🃏 حاسبة التوقيت الذهبي للخصائص", "🗓️ حساب الخطة", "قدم خطة لتفعيل الـ Wildcard, Free Hit, Bench Boost, Triple Captain.")
-    elif page == "🛡️ مؤشر الملكية المؤثرة (EO)":
-        render_ai_section("🛡️ مؤشر الملكية المؤثرة", "📊 تحليل مخاطر EO", "حلل مؤشر الملكية المؤثرة (EO) ومخاطر عدم امتلاك أكثر اللاعبين شعبية.")
-    elif page == "📅 مخطط التبديلات الـ 3 القادمة":
-        render_ai_section("📅 مخطط التبديلات الـ 3 القادمة", "🗓️ إعداد خطة التبديلات", f"اقترح خطة تبديلات لـ 3 جولات قادمة للفريق ID: {saved_fpl_id}")
-    elif page == "🔥 رادار الدرافتات (3 أيام)":
-        render_ai_section("🔥 أكثر اللاعبين تكراراً في الدرافتات", "🔍 كشف الأكثر تكراراً", "أبرز اللاعبين المختارين بكثرة في تشكيلات الدرافت خلال الـ 72 ساعة الماضية.")
-    elif page == "🎙️ رادار المؤتمرات والإصابات":
-        render_ai_section("🎙️ ملخص المؤتمرات الصحفية", "🔄 جلب أحدث التصريحات", "قدم ملخصاً لأهم ما ورد في المؤتمرات الصحفية والإصابات هذا الأسبوع.")
-    elif page == "📈 رادار الأسعار":
-        render_ai_section("📈 موجز تغيرات الأسعار", "🔄 جلب التغيرات", "قدم تقريراً بجداول عن التغيرات المتوقعة في أسعار اللاعبين (ارتفاع/انخفاض).")
-    elif page == "👑 مصفوفة الكابتن":
-        render_ai_section("👑 ترشيحات شارة الكابتن", "⚡ ترشيح الكابتن", "قدم أفضل 3 خيارات كابتن للجولة القادمة مع نسبة المخاطرة.")
-    elif page == "🎯 استراتيجيات المغامرة":
-        render_ai_section("🎯 تقييم المغامرة والريسك", "🤖 تقييم الريسك", "قيم استراتيجية خصم النقاط (-4/-8) والخيارات التفاضلية Differential لهذا الأسبوع.")
-    elif page == "📜 سجل وتقييم القرارات":
-        u_log = st.text_area("✍️ ادخل قراراتك الأخيرة:")
-        if st.button("🧐 تقييم القرارات") and u_log:
-            try:
-                st.markdown(run_fpl_ai(gemini_key, f"قيم القرارات التالية واذكر الإيجابيات والسلبيات: {u_log}"))
-            except Exception as e:
-                st.error(f"⚠️ {e}")
-else:
-    st.info("الرجاء إدخال مفتاح Gemini API للبدء.")
+                    for row_players in [gk, defenders, midfielders, forwards]:
+                        st.markdown(
+                            '<div class="pitch-row">', unsafe_allow_html=True
+                        )
+                        for p in row_players:
+                            cap_tag = (
+                                " (C)"
+                                if p["is_captain"]
+                                else (" (VC)" if p["is_vice"] else "")
+                            )
+                            st.markdown(
+                                f'<div class="player-card">{p["name"]}{cap_tag}<span>{p["team"]}</span></div>',
+                                unsafe_allow_html=True,
+                            )
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    # البدلاء
+                    st.write("**دكة البدلاء:**")
+                    bench_names = [
+                        f"{p['name']} ({p['team']})" for p in bench
+                    ]
+                    st.info(" | ".join(bench_names))
+
+                    # تقرير الذكاء الاصطناعي
+                    st.markdown("---")
+                    st.subheader("🤖 تقرير الخبير والبدائل الموصى بها")
+                    squad_txt = ", ".join([
+                        f"{p['name']} ({p['team']})" for p in squad
+                    ])
+                    ai_prompt = f"حلل تشكيلة الفانتسي التالية وقدم أفضل نصيحة تبديل واختيار كابتن للجولة القادمة: {squad_txt}"
+                    analysis = ask_gemini(ai_prompt)
+                    st.write(analysis)
+
+                    # ملخص للواتساب
+                    st.subheader("📱 ملخص للنسخ (WhatsApp)")
+                    wa_summary = (
+                        f"📊 *تقرير تشكيلة الفانتسي*\n\n{analysis[:300]}..."
+                    )
+                    st.code(wa_summary, language="text")
+
+# ---------------------------------------------------------
+# باقي الأقسام الخفيفة السريعة
+# ---------------------------------------------------------
+elif category == "🛡️ (EO) مؤشر الملكية المؤثرة":
+    st.header("🛡️ المؤشر المؤثر للملكية (Effective Ownership)")
+    st.info(
+        "يساعدك هذا المؤشر على معرفة تأثير تألق اللاعب على ترتيبك في الدوري."
+    )
+    player_input = st.text_input("ادخل اسم اللاعب لمعاينة نسبة مخاطرته:")
+    if player_input:
+        res = ask_gemini(
+            f"ما هي نسبة الملكية الكلية والمؤثرة المقدرة للاعب {player_input} وما هي خطورة عدم امتلاكه؟"
+        )
+        st.write(res)
+
+elif category == "🎯 (Chips) مخطط الخصائص":
+    st.header("🎯 التخطيط لاستخدام الخصائص (Chips)")
+    st.write("أفضل الفترات المقترحة لاستخدام (Wildcard, Free Hit, Bench Boost):")
+    res = ask_gemini(
+        "أعطني استراتيجية سريعة ومختصرة لاستخدام خواص الفانتسي هذا الموسم."
+    )
+    st.write(res)
+
+elif category == "🚨 مخطط التهديدات الـ 3 القادمة":
+    st.header("🚨 التهديدات وصعوبة المواجهات القادمة")
+    res = ask_gemini(
+        "اذكر لي أصعب 3 فرق لديها جدول مواجهات معقد في الجولات الثلاث القادمة."
+    )
+    st.write(res)
+
+elif category == "🚑 رادار الإصابات والغيابات":
+    st.header("🚑 أهم الغيابات والإصابات المؤكدة")
+    res = ask_gemini(
+        "يلخص لي قائمة بـ 5 لاعبين مهمين مصابين أو مشكوك بمشاركتهم للجولة القادمة بالفانتسي."
+    )
+    st.write(res)
+
+elif category == "👑 مصفوفة الكابتن":
+    st.header("👑 أفضل 3 خيارات للكابتن")
+    res = ask_gemini(
+        "من هم أفضل 3 لاعبين مرشحين لارتداء شارة الكابتن بالجولة القادمة مع نسبة المخاطرة؟"
+    )
+    st.write(res)
