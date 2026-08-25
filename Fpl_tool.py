@@ -81,17 +81,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("تغطية حية لموسم 2026/2027 ⚽")
 
-# 4. إعداد واستدعاء الذكاء الاصطناعي (Gemini)
-if secrets_gemini:
-    try:
-        genai.configure(api_key=secrets_gemini)
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------
-# توجيه صارم مستوحى من منهجية نخبة خبراء الفانتسي العرب
-# ---------------------------------------------------------
+# 4. توجيه الخبراء واستدعاء الذكاء الاصطناعي
 SYSTEM_PROMPT = """
 أنت مستشار وتحليلي بيانات فانتسي البريميرليج (FPL) الأعلى تقييماً لموسم 2026/2027.
 تعتمد في استراتيجياتك وتوصياتك على دمج الرؤى التكتيكية والإحصائية لأبرز محللي الفانتسي العرب على منصة X وهم:
@@ -99,7 +89,7 @@ SYSTEM_PROMPT = """
 
 قواعد وإرشادات التحليل الإجباري:
 1. التشكيلة المرسلة دقيقة ومحدثة 100% لموسم 2026/2027 من FPL API؛ يمنع التشكيك في أندية اللاعبين أو الانتقالات تماماً.
-2. ادخل في صلب التحليل مباشرة وبدون أي مقدمات أو كلام إنشائي أو تنبيهات جانبة.
+2. ادخل في صلب التحليل مباشرة وبدون أي مقدمات أو كلام إنشائي أو تنبيهات جانبية.
 3. اعتمد على الإحصائيات المتقدمة: الأهداف المتوقعة (xG)، التمريرات الحاسمة المتوقعة (xA)، جدول المواجهات (FDR)، والملكية المؤثرة (EO).
 4. قسّم التقرير دائماً إلى 3 أجزاء مرتبة كالتالي:
    - 🔍 **تشخيص التشكيلة وفحص الثقوب:** (اللاعبون المصابون، دكة الخمول، المواجهات المعقدة).
@@ -119,14 +109,24 @@ def ask_gemini(prompt_text, extra_context=""):
         if extra_context:
             full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للاستئناس بها:\n{extra_context}"
 
-        candidate_models = [
-            "gemini-1.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-pro",
-        ]
+        # جلب الموديلات المدعومة تلقائياً لمنع أخطاء 404
+        available_models = []
+        try:
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    available_models.append(m.name)
+        except Exception:
+            pass
+
+        if not available_models:
+            available_models = [
+                "gemini-1.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-pro",
+            ]
 
         last_error = ""
-        for model_name in candidate_models:
+        for model_name in available_models:
             try:
                 model = genai.GenerativeModel(
                     model_name=model_name, system_instruction=SYSTEM_PROMPT
@@ -138,10 +138,12 @@ def ask_gemini(prompt_text, extra_context=""):
                 last_error = str(e)
                 continue
 
-        return f"⚠️ تعذر الحصول على رد: {last_error}"
+        return f"⚠️ تعذر الحصول على رد من الموديلات المتاحة: {last_error}"
 
     except Exception as e:
         return f"⚠️ خطأ في الاتصال: {str(e)}"
+
+
 # 5. وظائف جلب البيانات المباشرة من FPL API
 def get_json(url):
     try:
@@ -237,9 +239,7 @@ if category == "💬 المساعد الصوتي والدردشة":
 
         with st.chat_message("assistant"):
             with st.spinner("جاري التفكير..."):
-                answer = ask_gemini(
-                    f"بصفتك خبير فانتسي البريميرليج، أجب باختصار واحترافية: {user_query}"
-                )
+                answer = ask_gemini(user_query)
                 st.write(answer)
                 st.session_state.messages.append(
                     {"role": "assistant", "content": answer}
@@ -251,8 +251,14 @@ if category == "💬 المساعد الصوتي والدردشة":
 elif category == "📊 تحليل التشكيلة والتقرير اليومي":
     st.header("📊 تحليل التشكيلة وحالة الفريق")
 
+    expert_tweets = st.text_area(
+        "📥 لصق تغريدات أو تقارير الخبراء (اختياري):",
+        placeholder="انسخ هنا آخر تغريدة من @arabsfpl أو @adelculer أو @ali7amer للربط مع تشكيلتك...",
+        height=100,
+    )
+
     if not secrets_fpl_id:
-        st.warning("⚠️ يرجى أدخال رقم FPL Team ID في القائمة الجانبية.")
+        st.warning("⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية.")
     else:
         if st.button("🚀 جلب وتحليل التشكيلة بـ ID"):
             with st.spinner("جاري جلب البيانات ورسم الملعب..."):
@@ -262,7 +268,6 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
                 else:
                     st.subheader("🟢 التشكيلة الأساسية على الملعب")
 
-                    # تقسيم اللاعبين أساسيين وبدلاء
                     starting_11 = [p for p in squad if p["position"] <= 11]
                     bench = [p for p in squad if p["position"] > 11]
 
@@ -273,7 +278,6 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
                     ]
                     forwards = [p for p in starting_11 if p["pos"] == "FWD"]
 
-                    # رسم الملعب
                     st.markdown(
                         '<div class="pitch-container">', unsafe_allow_html=True
                     )
@@ -296,27 +300,27 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                    # البدلاء
                     st.write("**دكة البدلاء:**")
                     bench_names = [
                         f"{p['name']} ({p['team']})" for p in bench
                     ]
                     st.info(" | ".join(bench_names))
 
-                    # تقرير الذكاء الاصطناعي
                     st.markdown("---")
                     st.subheader("🤖 تقرير الخبير والبدائل الموصى بها")
                     squad_txt = ", ".join([
                         f"{p['name']} ({p['team']})" for p in squad
                     ])
                     ai_prompt = f"حلل تشكيلة الفانتسي التالية وقدم أفضل نصيحة تبديل واختيار كابتن للجولة القادمة: {squad_txt}"
-                    analysis = ask_gemini(ai_prompt)
+
+                    analysis = ask_gemini(
+                        ai_prompt, extra_context=expert_tweets
+                    )
                     st.write(analysis)
 
-                    # ملخص للواتساب
                     st.subheader("📱 ملخص للنسخ (WhatsApp)")
                     wa_summary = (
-                        f"📊 *تقرير تشكيلة الفانتسي*\n\n{analysis[:300]}..."
+                        f"📊 *تقرير تشكيلة الفانتسي*\n\n{analysis[:350]}..."
                     )
                     st.code(wa_summary, language="text")
 
