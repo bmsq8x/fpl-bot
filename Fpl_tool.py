@@ -93,26 +93,32 @@ def ask_gemini(prompt_text):
     if not secrets_gemini:
         return "⚠️ يرجى إدخال مفتاح Gemini API في القائمة الجانبية أو في متغيرات Railway."
 
-    last_error = ""
-    # تجربة أحدث موديلات Gemini بالترتيب
-    models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-    ]
+    try:
+        genai.configure(api_key=secrets_gemini)
+        
+        # جلب الموديلات المتاحة لمفتاحك تلقائياً لمنع أخطاء 404
+        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        if not all_models:
+            return "⚠️ لم يتم العثور على موديلات مدعومة لهذا المفتاح."
 
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt_text)
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            last_error = str(e)
-            continue
+        # اختيار أفضل موديل متاح من القائمة
+        selected_model = all_models[0]
+        for pref in ['models/gemini-2.5-flash', 'models/gemini-2.0-flash', 'models/gemini-1.5-flash', 'models/gemini-1.5-pro']:
+            if pref in all_models:
+                selected_model = pref
+                break
 
-    return f"⚠️ خطأ من Google API: {last_error}"
+        model = genai.GenerativeModel(selected_model)
+        response = model.generate_content(prompt_text)
+        
+        if response and response.text:
+            return response.text
+            
+    except Exception as e:
+        return f"⚠️ خطأ من Google API: {str(e)}"
+
+    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
 
 # 5. وظائف جلب البيانات المباشرة من FPL API
 def get_json(url):
