@@ -89,53 +89,59 @@ if secrets_gemini:
         pass
 
 
-def ask_gemini(prompt_text):
+# ---------------------------------------------------------
+# توجيه صارم مستوحى من منهجية نخبة خبراء الفانتسي العرب
+# ---------------------------------------------------------
+SYSTEM_PROMPT = """
+أنت مستشار وتحليلي بيانات فانتسي البريميرليج (FPL) الأعلى تقييماً لموسم 2026/2027.
+تعتمد في استراتيجياتك وتوصياتك على دمج الرؤى التكتيكية والإحصائية لأبرز محللي الفانتسي العرب على منصة X وهم:
+(@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
+
+قواعد وإرشادات التحليل الإجباري:
+1. التشكيلة المرسلة دقيقة ومحدثة 100% لموسم 2026/2027 من FPL API؛ يمنع التشكيك في أندية اللاعبين أو الانتقالات تماماً.
+2. ادخل في صلب التحليل مباشرة وبدون أي مقدمات أو كلام إنشائي أو تنبيهات جانبة.
+3. اعتمد على الإحصائيات المتقدمة: الأهداف المتوقعة (xG)، التمريرات الحاسمة المتوقعة (xA)، جدول المواجهات (FDR)، والملكية المؤثرة (EO).
+4. قسّم التقرير دائماً إلى 3 أجزاء مرتبة كالتالي:
+   - 🔍 **تشخيص التشكيلة وفحص الثقوب:** (اللاعبون المصابون، دكة الخمول، المواجهات المعقدة).
+   - 🔄 **التوصية بالتبديل الأفضل (Best Transfer):** (تحديد المغادر والبديل الأنسب بناءً على xG/xA وجدول الجولات القادمة).
+   - 👑 **ترشيح الكابتن:** (خيار آمن أصحاب الملكية العالية + خيار تفاضلي Differential مع التبرير الرقمي).
+"""
+
+
+def ask_gemini(prompt_text, extra_context=""):
     if not secrets_gemini:
         return "⚠️ يرجى إدخال مفتاح Gemini API في القائمة الجانبية أو في متغيرات Railway."
 
     try:
         genai.configure(api_key=secrets_gemini)
 
-        # 1. قائمة الموديلات المرشحة للاستدلال بالترتيب
+        full_prompt = prompt_text
+        if extra_context:
+            full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للاستئناس بها:\n{extra_context}"
+
         candidate_models = [
-            'gemini-1.5-flash',
-            'gemini-2.0-flash',
-            'gemini-3.6-flash',
-            'gemini-1.5-pro',
+            "gemini-1.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-pro",
         ]
 
-        # 2. محاولة جلب الموديلات المدعومة ديناميكياً لتفادي أخطاء 404
-        try:
-            live_models = [
-                m.name.replace('models/', '')
-                for m in genai.list_models()
-                if 'generateContent' in m.supported_generation_methods
-            ]
-            if live_models:
-                # وضع الموديلات المتاحة فعلية في مقدمة الترتيب
-                candidate_models = [
-                    m for m in candidate_models if m in live_models
-                ] + live_models
-        except Exception:
-            pass
-
-        # 3. التجربة التلقائية للموديلات المتاحة
         last_error = ""
         for model_name in candidate_models:
             try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(prompt_text)
+                model = genai.GenerativeModel(
+                    model_name=model_name, system_instruction=SYSTEM_PROMPT
+                )
+                response = model.generate_content(full_prompt)
                 if response and response.text:
                     return response.text
             except Exception as e:
                 last_error = str(e)
                 continue
 
-        return f"⚠️ متعذر الاتصال بالموديلات: {last_error}"
+        return f"⚠️ تعذر الحصول على رد: {last_error}"
 
     except Exception as e:
-        return f"⚠️ خطأ في التهيأة: {str(e)}"
-
+        return f"⚠️ خطأ في الاتصال: {str(e)}"
 # 5. وظائف جلب البيانات المباشرة من FPL API
 def get_json(url):
     try:
