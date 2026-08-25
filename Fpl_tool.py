@@ -96,16 +96,20 @@ def ask_gemini(prompt_text):
     try:
         genai.configure(api_key=secrets_gemini)
         
-        # جلب الموديلات المتاحة لمفتاحك تلقائياً لمنع أخطاء 404
-        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        if not all_models:
+        # جلب قائمة الموديلات المتاحة وتنظيف الأسماء من البادئة
+        available = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                clean_name = m.name.replace('models/', '')
+                available.append(clean_name)
+
+        if not available:
             return "⚠️ لم يتم العثور على موديلات مدعومة لهذا المفتاح."
 
-        # اختيار أفضل موديل متاح من القائمة
-        selected_model = all_models[0]
-        for pref in ['models/gemini-2.5-flash', 'models/gemini-2.0-flash', 'models/gemini-1.5-flash', 'models/gemini-1.5-pro']:
-            if pref in all_models:
+        # اختيار الموديل المستقر المتاح بالترتيب
+        selected_model = available[0]
+        for pref in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash']:
+            if pref in available:
                 selected_model = pref
                 break
 
