@@ -3,7 +3,7 @@ import google.generativeai as genai
 from PIL import Image
 import requests
 import datetime
-
+import os
 # 1. إعدادات الصفحة والتصميم البصري (CSS)
 st.set_page_config(page_title="مدير الفانتسي الذكي 2026/2027", layout="wide", initial_sidebar_state="expanded")
 
@@ -38,9 +38,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. الحفظ التلقائي للمفاتيح
-secrets_gemini = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("gemini_key", "")
-secrets_fpl_id = str(st.secrets.get("FPL_ID") or st.secrets.get("fpl_id", ""))
+# 2. الحفظ التلقائي للمفاتيح (دعم Railway و Streamlit)
+def get_secret(key_name, default=""):
+    if key_name in os.environ:
+        return os.environ[key_name]
+    try:
+        if key_name in st.secrets:
+            return str(st.secrets[key_name])
+    except Exception:
+        pass
+    return default
+
+secrets_gemini = get_secret("GEMINI_API_KEY") or get_secret("gemini_key")
+secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 
 # 3. وظائف جلب البيانات المباشرة
 def get_json(url):
