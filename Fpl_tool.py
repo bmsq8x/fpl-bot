@@ -95,34 +95,46 @@ def ask_gemini(prompt_text):
 
     try:
         genai.configure(api_key=secrets_gemini)
-        
-        # جلب قائمة الموديلات المتاحة وتنظيف الأسماء من البادئة
-        available = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                clean_name = m.name.replace('models/', '')
-                available.append(clean_name)
 
-        if not available:
-            return "⚠️ لم يتم العثور على موديلات مدعومة لهذا المفتاح."
+        # 1. قائمة الموديلات المرشحة للاستدلال بالترتيب
+        candidate_models = [
+            'gemini-1.5-flash',
+            'gemini-2.0-flash',
+            'gemini-3.6-flash',
+            'gemini-1.5-pro',
+        ]
 
-        # اختيار الموديل المستقر المتاح بالترتيب
-        selected_model = available[0]
-        for pref in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash']:
-            if pref in available:
-                selected_model = pref
-                break
+        # 2. محاولة جلب الموديلات المدعومة ديناميكياً لتفادي أخطاء 404
+        try:
+            live_models = [
+                m.name.replace('models/', '')
+                for m in genai.list_models()
+                if 'generateContent' in m.supported_generation_methods
+            ]
+            if live_models:
+                # وضع الموديلات المتاحة فعلية في مقدمة الترتيب
+                candidate_models = [
+                    m for m in candidate_models if m in live_models
+                ] + live_models
+        except Exception:
+            pass
 
-        model = genai.GenerativeModel(selected_model)
-        response = model.generate_content(prompt_text)
-        
-        if response and response.text:
-            return response.text
-            
+        # 3. التجربة التلقائية للموديلات المتاحة
+        last_error = ""
+        for model_name in candidate_models:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt_text)
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+        return f"⚠️ متعذر الاتصال بالموديلات: {last_error}"
+
     except Exception as e:
-        return f"⚠️ خطأ من Google API: {str(e)}"
-
-    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
+        return f"⚠️ خطأ في التهيأة: {str(e)}"
 
 # 5. وظائف جلب البيانات المباشرة من FPL API
 def get_json(url):
