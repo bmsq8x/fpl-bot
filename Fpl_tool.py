@@ -97,54 +97,9 @@ with st.sidebar:
   st.markdown("---")
   st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-# ---------------------------------------------------------
-# 4. التوجيه ودوال الاتصال بـ OpenAI
-# ---------------------------------------------------------
-SYSTEM_PROMPT = """
-أنت مستشار وخبير فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
-تعتمد على دمج بيانات FPL المباشرة مع آراء كبار الخبراء العرب: (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
-
-تعليمات حاسمة:
-1. اكتب الإجابة والتحليل باللغة العربية الفصحى المباشرة والمكتملة فقط.
-2. ممنوع طباعة أي أفكار جانبية أو مسودات تفكير بالإنجليزية.
-3. التزم تماماً بأسماء اللاعبين وأنديتهم الرسمية المرفقة في طلب التشكيلة لموسم 2026/2027.
-"""
-
-
-def ask_openai(prompt_text, extra_context=""):
-  if not secrets_openai:
-    return (
-        "⚠️ يرجى إدخال مفتاح OpenAI API في القائمة الجانبية أو في متغيرات"
-        " Railway."
-    )
-
-  try:
-    client = OpenAI(api_key=secrets_openai)
-    full_prompt = prompt_text
-    if extra_context:
-      full_prompt += f"\n\n📌 معطيات وتغريدات الخبراء للتحليل:\n{extra_context}"
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": full_prompt},
-        ],
-        temperature=0.2,
-        max_tokens=2000,
-    )
-
-    if response.choices and response.choices[0].message.content:
-      return response.choices[0].message.content.strip()
-
-  except Exception as e:
-    return f"⚠️ خطأ في الاتصال بـ OpenAI: {str(e)}"
-
-  return "⚠️ تعذر الحصول على رد من OpenAI."
-
 
 # ---------------------------------------------------------
-# 5. وظائف جلب بيانات FPL المباشرة (Cached)
+# 4. وظائف جلب بيانات FPL المباشرة والسريعة (Cached)
 # ---------------------------------------------------------
 def get_json(url):
   try:
@@ -154,7 +109,7 @@ def get_json(url):
     return None
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def fetch_live_fpl_data():
   static_data = get_json(
       "https://fantasy.premierleague.com/api/bootstrap-static/"
@@ -167,6 +122,23 @@ def fetch_live_fpl_data():
       et["id"]: et["singular_name_short"] for et in static_data["element_types"]
   }
   return players, teams, types, static_data
+
+
+@st.cache_data(ttl=300)
+def get_top_fpl_targets_2026():
+  """جلب قائمة حية بأهم 100 لاعب في الموسم الحالي مع أنديتهم لمنع الهلوسة بأسماء قديمة"""
+  players, teams, _, _ = fetch_live_fpl_data()
+  if not players:
+    return ""
+  top_players = sorted(
+      players.values(),
+      key=lambda x: float(x.get("selected_by_percent", 0) or 0),
+      reverse=True,
+  )[:100]
+  target_list = [
+      f"{p['web_name']} ({teams.get(p['team'])})" for p in top_players
+  ]
+  return ", ".join(target_list)
 
 
 @st.cache_data(ttl=300)
@@ -204,6 +176,60 @@ def fetch_manager_squad(manager_id):
         "price": p_info.get("now_cost", 0) / 10,
     })
   return squad, None
+
+
+# ---------------------------------------------------------
+# 5. التوجيه ودوال الاتصال بـ OpenAI (مع دمج البيانات المباشرة)
+# ---------------------------------------------------------
+SYSTEM_PROMPT = """
+أنت مستشار وخبير فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
+تعتمد على دمج بيانات FPL المباشرة المرفقة مع آراء كبار الخبراء العرب: (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
+
+تعليمات صارمة وحاسمة:
+1. يمنع منعاً باتاً اقتراح أي لاعب غادر الدوري الإنجليزي الممتاز أو انتقل لدوري آخر (مثل هاري كين). التزم باللاعبين المتاحين حالياً في الموسم الحالي 2026/2027 المرفقين في البيانات الحية.
+2. اكتب الإجابة والتحليل باللغة العربية الفصحى المباشرة والمكتملة فقط.
+3. ممنوع طباعة أي أفكار جانبية أو مسودات تفكير بالإنجليزية.
+4. التزم تماماً بأسماء اللاعبين وأنديتهم الرسمية المرفقة في طلب التشكيلة والبيانات الحية.
+"""
+
+
+def ask_openai(prompt_text, extra_context=""):
+  if not secrets_openai:
+    return (
+        "⚠️ يرجى إدخال مفتاح OpenAI API في القائمة الجانبية أو في متغيرات"
+        " Railway."
+    )
+
+  try:
+    client = OpenAI(api_key=secrets_openai)
+
+    # جلب قائمة اللاعبين الحية دائماً وإرفاقها في السياق لمنع الذكاء من اقتراح لاعبين قدامى
+    live_players_data = get_top_fpl_targets_2026()
+
+    full_prompt = (
+        f"{prompt_text}\n\n[بيانات أهم نجوم الدوري الإنجليزي الممتاز حياً"
+        f" لموسم 2026/2027 للاسترشاد والتأكد]:\n{live_players_data}"
+    )
+    if extra_context:
+      full_prompt += f"\n\n📌 معطيات وتغريدات الخبراء للتحليل:\n{extra_context}"
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": full_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=2000,
+    )
+
+    if response.choices and response.choices[0].message.content:
+      return response.choices[0].message.content.strip()
+
+  except Exception as e:
+    return f"⚠️ خطأ في الاتصال بـ OpenAI: {str(e)}"
+
+  return "⚠️ تعذر الحصول على رد من OpenAI."
 
 
 # ---------------------------------------------------------
@@ -430,8 +456,9 @@ elif category == "👑 مصفوفة الكابتن":
   if st.button("🚀 عرض ترشيحات الكابتن"):
     with st.spinner("جاري التحليل..."):
       res = ask_openai(
-          "من هم أفضل 3 لاعبين مرشحين لشارة الكابتن للجولة القادمة مع توضيح"
-          " خيار آمن وخيار تفاضلي باللغة العربية الفصحى؟"
+          "من هم أفضل 3 لاعبين مرشحين لشارة الكابتن للجولة القادمة بناءً على"
+          " بيانات وتشكيلات الموسم الحالي 2026/2027 فقط، مع توضيح خيار آمن"
+          " وخيار تفاضلي باللغة العربية الفصحى؟"
       )
       st.write(res)
 
@@ -441,7 +468,7 @@ elif category == "🚑 رادار الإصابات والغيابات":
     with st.spinner("جاري جلب القائمة..."):
       res = ask_openai(
           "يلخص لي قائمة بأهم 5 لاعبين مصابين أو مشكوك بمشاركتهم للجولة"
-          " القادمة في فانتسي الدوري الإنجليزي."
+          " القادمة في فانتسي الدوري الإنجليزي من الفرق الحالية للموسم."
       )
       st.write(res)
 
