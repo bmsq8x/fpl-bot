@@ -347,7 +347,7 @@ st.markdown(
 # شريط إدخال معرف الفريق في أعلى الصفحة الرئيسية مباشرة
 col_top1, col_top2 = st.columns([2, 3])
 with col_top1:
-  user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="3427112")
+  user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="000000")
 
 with col_top2:
   _, _, _, _, deadline_str = fetch_live_fpl_data()
