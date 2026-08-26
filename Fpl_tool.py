@@ -44,6 +44,26 @@ div.stButton > button:hover {
     border-radius: 12px !important;
 }
 
+/* تنسيق عصري لقائمة التنقل (Radio) لتصبح كبطاقات تفاعلية */
+div[data-testid="stRadio"] > div {
+    gap: 8px;
+}
+div[data-testid="stRadio"] label {
+    background: rgba(36, 0, 56, 0.7) !important;
+    border: 1px solid rgba(0, 255, 135, 0.3) !important;
+    border-radius: 12px !important;
+    padding: 10px 14px !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+div[data-testid="stRadio"] label:hover {
+    background: rgba(0, 255, 135, 0.15) !important;
+    border-color: #00ff87 !important;
+    transform: translateX(4px);
+}
+
 /* صناديق الإحصائيات الفخمة */
 .metric-box {
     background: linear-gradient(145deg, rgba(36, 0, 56, 0.85), rgba(20, 0, 35, 0.95)); 
@@ -271,11 +291,12 @@ def fetch_manager_squad(manager_id):
 
 
 # ---------------------------------------------------------
-# 3. القائمة الجانبية (Sidebar) الآمنة
+# 3. القائمة الجانبية (Sidebar) مع إبراز Team ID في الأعلى وقائمة عصرية
 # ---------------------------------------------------------
 with st.sidebar:
   st.markdown(
-      "<h2 style='color: #00ff87; text-align: center;'>⚡ BMS bot</h2>",
+      "<h2 style='color: #00ff87; text-align: center; margin-bottom: 0;'>⚡ BMS"
+      " bot</h2>",
       unsafe_allow_html=True,
   )
   st.markdown(
@@ -285,20 +306,55 @@ with st.sidebar:
   )
   st.markdown("---")
 
+  # إبراز خانة معرف فريقك في أعلى القائمة الجانبية كعنصر أساسي ومباشر
+  st.markdown(
+      "<p"
+      " style='color: #00ff87; font-weight: bold; font-size: 14px; margin-bottom:"
+      " 5px;'>⚽ معرف فريقك (FPL Team ID):</p>",
+      unsafe_allow_html=True,
+  )
   user_fpl_id = st.text_input(
-      "معرف فريقك (FPL Team ID):", placeholder="مثال: 3427112"
+      "معرف فريقك",
+      value="3427112",
+      label_visibility="collapsed",
+      placeholder="مثال: 3427112",
   )
 
   st.markdown("---")
   st.markdown(
-      "<div style='text-align: center; color: #60efff; font-size: 12px;'>النظام"
+      "<p"
+      " style='color: #60efff; font-weight: bold; font-size: 14px; margin-bottom:"
+      " 8px;'>📍 أقسام المنصة الذكية:</p>",
+      unsafe_allow_html=True,
+  )
+
+  # قائمة التنقل العصرية (بديل القائمة المنسدلة التقليدية)
+  category = st.radio(
+      "الأقسام",
+      [
+          "🏠 لوحة التحكم الرئيسية والدوريات",
+          "📊 تحليل التشكيلة وحالة الفريق الحية",
+          "🔄 مخطط التبديلات الذكي (بالمراكز الدقيقة)",
+          "👑 مصفوفة الكابتن الاستراتيجية",
+          "💬 المساعد الذكي والدردشة الفورية",
+          "🚑 تقرير الإصابات والغيابات الحقيقي",
+          "📈 رادار تغير الأسعار في السوق",
+          "💎 كاشف التفاضلي الذهبي (Differential Finder)",
+          "🛡️ (EO) مؤشر الملكية المؤثرة",
+      ],
+      label_visibility="collapsed",
+  )
+
+  st.markdown("---")
+  st.markdown(
+      "<div style='text-align: center; color: #60efff; font-size: 11px;'>النظام"
       " آمن ويتحدث تلقائياً كل ساعة 🚀</div>",
       unsafe_allow_html=True,
   )
 
 
 # ---------------------------------------------------------
-# 4. الاتصال بـ OpenAI مع دمج تحليل الفرق العشرين واستراتيجيات النخبة وحسابات إكس الجديدة
+# 4. الاتصال بـ OpenAI وتوجيهات الذكاء الاصطناعي
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
 أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 26/27 لموسم 2026/2027.
@@ -396,26 +452,11 @@ if deadline_str:
 
 st.markdown("---")
 
-category = st.selectbox(
-    "📍 اختر قسم العمل المطلوب:",
-    [
-        "🏠 لوحة التحكم الرئيسية والدوريات",
-        "📊 تحليل التشكيلة وحالة الفريق الحية",
-        "🔄 مخطط التبديلات الذكي (بالمراكز الدقيقة)",
-        "👑 مصفوفة الكابتن الاستراتيجية",
-        "💬 المساعد الذكي والدردشة الفورية",
-        "🚑 تقرير الإصابات والغيابات الحقيقي",
-        "📈 رادار تغير الأسعار في السوق",
-        "💎 كاشف التفاضلي الذهبي (Differential Finder)",
-        "🛡️ (EO) مؤشر الملكية المؤثرة",
-    ],
-)
-
 # ---------------------------------------------------------
-# الأقسام والأدوات
+# الأقسام والأدوات بناءً على الاختيار العصري من القائمة الجانبية
 # ---------------------------------------------------------
 if category == "🏠 لوحة التحكم الرئيسية والدوريات":
-  st.header("🏠 لوحة التحكم الشخصية")
+  st.header("🏠 لوحة التحكم الشخصية والدوريات")
   if not user_fpl_id:
     st.warning("⚠️ يرجى إدخال رقم FPL Team ID الخاص بك في القائمة الجانبية.")
   else:
@@ -444,6 +485,21 @@ if category == "🏠 لوحة التحكم الرئيسية والدوريات":
           f'<div class="metric-box"><h3>{team_name}</h3><p>اسم الفريق</p></div>',
           unsafe_allow_html=True,
       )
+
+      st.markdown("---")
+      st.subheader("🏆 الدوريات الخاصة المسجل بها (Classic Leagues)")
+      classic_leagues = entry_data.get("leagues", {}).get("classic", [])
+      if classic_leagues:
+        league_data = []
+        for lg in classic_leagues:
+          league_data.append({
+              "اسم الدوري": lg.get("name"),
+              "ترتيبك الحالي": lg.get("entry_rank"),
+              "الترتيب السابق": lg.get("entry_last_rank"),
+          })
+        st.table(league_data)
+      else:
+        st.info("لا توجد دوريات خاصة مسجلة لهذا الحساب.")
 
 elif category == "📊 تحليل التشكيلة وحالة الفريق الحية":
   st.header("📊 تحليل التشكيلة وحالة الجاهزية البصرية")
