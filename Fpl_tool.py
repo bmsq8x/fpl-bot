@@ -1,10 +1,9 @@
-import datetime
 import os
 import google.generativeai as genai
 import requests
 import streamlit as st
 
-# 1. إعدادات الصفحة والتصميم البصري (CSS المسرّع)
+# 1. إعدادات الصفحة والتصميم البصري (CSS)
 st.set_page_config(
     page_title="مدير الفانتسي الذكي 2026/2027",
     layout="wide",
@@ -48,7 +47,7 @@ section[data-testid="stSidebar"] { background-color: #1a002c !important; border-
 )
 
 
-# 2. قراءة المفاتيح (Railway & Streamlit Secrets)
+# 2. قراءة المفاتيح
 def get_secret(key_name, default=""):
   if key_name in os.environ:
     return os.environ[key_name]
@@ -86,7 +85,7 @@ with st.sidebar:
   st.markdown("---")
   st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-# 4. توجيه صارم ومباشر للنموذج
+# 4. التوجيه المباشر للنموذج
 SYSTEM_PROMPT = """
 أنت مستشار ومحلل بيانات فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
 تعتمد في توصياتك على الرؤى التكتيكية لأبرز خبراء الفانتسي العرب:
@@ -113,6 +112,7 @@ def clean_response(text):
             "reviewing",
             "note on rule",
             "checking rules",
+            "arabic text:",
         ]
     ):
       continue
@@ -134,13 +134,12 @@ def ask_gemini(prompt_text, extra_context=""):
     if extra_context:
       full_prompt += f"\n\n📌 معطيات وتغريدات الخبراء للتحليل:\n{extra_context}"
 
-    # رفع حد الرموز لضمان إكمال التقرير كاملاً بدون بتر
-    gen_config = genai.types.GenerationConfig(
-        temperature=0.2, max_output_tokens=2048
-    )
+    # تمرير إعدادات التوليد بصيغة dictionary آمنة لتفادي AttributeError
+    gen_config = {"temperature": 0.2, "max_output_tokens": 2048}
 
     models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
 
+    last_err = ""
     for model_name in models_to_try:
       try:
         model = genai.GenerativeModel(
@@ -151,16 +150,17 @@ def ask_gemini(prompt_text, extra_context=""):
         )
         if response and response.text:
           return clean_response(response.text)
-      except Exception:
+      except Exception as e:
+        last_err = str(e)
         continue
 
-    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
+    return f"⚠️ تعذر الحصول على رد: {last_err}"
 
   except Exception as e:
     return f"⚠️ خطأ في الاتصال: {str(e)}"
 
 
-# 5. وظائف جلب البيانات المباشرة مع Caching لتسريع الموقع
+# 5. وظائف جلب البيانات المباشرة
 def get_json(url):
   try:
     res = requests.get(url, timeout=4)
@@ -412,7 +412,7 @@ elif category == "🔄 مخطط التبديلات الموصى بها للجو�
 # باقي الأقسام
 # ---------------------------------------------------------
 elif category == "💬 المساعد الصوتي والدردشة":
-  st.header("🗣️ الدردشة والاستفسارات المباشرة")
+  st.header("🗣️ الدردشة واستفسارات الفانتسي")
   if "messages" not in st.session_state:
     st.session_state.messages = []
 
