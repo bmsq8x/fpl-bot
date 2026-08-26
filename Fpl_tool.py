@@ -276,7 +276,7 @@ if category == "🏠 الصفحة الرئيسية (نقاطي والدوريا�
         )
       with col4:
         st.markdown(
-            f'<div class="metric-box"><h3>{entry_data.get("name",'
+            f'<div class="metric-box"><h3>{entry_data.get("name", "Unknown")}</h3></div>'
             ' "")}</h3><p>{entry_data.get("player_first_name",'
             ' "")} {entry_data.get("player_last_name", "")}</p></div>',
             unsafe_allow_html=True,
