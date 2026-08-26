@@ -10,7 +10,7 @@ from openai import OpenAI
 st.set_page_config(
     page_title="BMS bot FPL 26/27",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown(
@@ -18,11 +18,9 @@ st.markdown(
 <style>
 /* خلفيات وزجاج معمد عصري */
 .stApp { background: linear-gradient(135deg, #090014 0%, #150024 100%) !important; color: #ffffff !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-section[data-testid="stSidebar"] { 
-    background: rgba(22, 0, 38, 0.95) !important; 
-    border-right: 1px solid rgba(0, 255, 135, 0.2); 
-    backdrop-filter: blur(12px);
-}
+
+/* إخفاء الشريط الجانبي تماماً للتأكيد */
+section[data-testid="stSidebar"] { display: none !important; }
 
 /* الأزرار العصرية بنمط التوهج النيون */
 div.stButton > button {
@@ -42,26 +40,6 @@ div.stButton > button:hover {
     color: #ffffff !important; 
     border: 1px solid rgba(0, 255, 135, 0.4) !important; 
     border-radius: 12px !important;
-}
-
-/* تنسيق عصري لقائمة التنقل (Radio) لتصبح كبطاقات تفاعلية */
-div[data-testid="stRadio"] > div {
-    gap: 8px;
-}
-div[data-testid="stRadio"] label {
-    background: rgba(36, 0, 56, 0.7) !important;
-    border: 1px solid rgba(0, 255, 135, 0.3) !important;
-    border-radius: 12px !important;
-    padding: 10px 14px !important;
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    transition: all 0.3s ease;
-    width: 100%;
-}
-div[data-testid="stRadio"] label:hover {
-    background: rgba(0, 255, 135, 0.15) !important;
-    border-color: #00ff87 !important;
-    transform: translateX(4px);
 }
 
 /* صناديق الإحصائيات الفخمة */
@@ -291,70 +269,7 @@ def fetch_manager_squad(manager_id):
 
 
 # ---------------------------------------------------------
-# 3. القائمة الجانبية (Sidebar) مع إبراز Team ID في الأعلى وقائمة عصرية
-# ---------------------------------------------------------
-with st.sidebar:
-  st.markdown(
-      "<h2 style='color: #00ff87; text-align: center; margin-bottom: 0;'>⚡ BMS"
-      " bot</h2>",
-      unsafe_allow_html=True,
-  )
-  st.markdown(
-      "<p style='text-align: center; color: #aaa; font-size: 12px;'>FPL"
-      " Assistant 26/27</p>",
-      unsafe_allow_html=True,
-  )
-  st.markdown("---")
-
-  # إبراز خانة معرف فريقك في أعلى القائمة الجانبية كعنصر أساسي ومباشر
-  st.markdown(
-      "<p"
-      " style='color: #00ff87; font-weight: bold; font-size: 14px; margin-bottom:"
-      " 5px;'>⚽ معرف فريقك (FPL Team ID):</p>",
-      unsafe_allow_html=True,
-  )
-  user_fpl_id = st.text_input(
-      "معرف فريقك",
-      value="3427112",
-      label_visibility="collapsed",
-      placeholder="مثال: 3427112",
-  )
-
-  st.markdown("---")
-  st.markdown(
-      "<p"
-      " style='color: #60efff; font-weight: bold; font-size: 14px; margin-bottom:"
-      " 8px;'>📍 أقسام المنصة الذكية:</p>",
-      unsafe_allow_html=True,
-  )
-
-  # قائمة التنقل العصرية (بديل القائمة المنسدلة التقليدية)
-  category = st.radio(
-      "الأقسام",
-      [
-          "🏠 لوحة التحكم الرئيسية والدوريات",
-          "📊 تحليل التشكيلة وحالة الفريق الحية",
-          "🔄 مخطط التبديلات الذكي (بالمراكز الدقيقة)",
-          "👑 مصفوفة الكابتن الاستراتيجية",
-          "💬 المساعد الذكي والدردشة الفورية",
-          "🚑 تقرير الإصابات والغيابات الحقيقي",
-          "📈 رادار تغير الأسعار في السوق",
-          "💎 كاشف التفاضلي الذهبي (Differential Finder)",
-          "🛡️ (EO) مؤشر الملكية المؤثرة",
-      ],
-      label_visibility="collapsed",
-  )
-
-  st.markdown("---")
-  st.markdown(
-      "<div style='text-align: center; color: #60efff; font-size: 11px;'>النظام"
-      " آمن ويتحدث تلقائياً كل ساعة 🚀</div>",
-      unsafe_allow_html=True,
-  )
-
-
-# ---------------------------------------------------------
-# 4. الاتصال بـ OpenAI وتوجيهات الذكاء الاصطناعي
+# 3. الاتصال بـ OpenAI وتوجيهات الذكاء الاصطناعي
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
 أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 26/27 لموسم 2026/2027.
@@ -416,7 +331,7 @@ def ask_openai(prompt_text, extra_context=""):
 
 
 # ---------------------------------------------------------
-# 5. واجهة العرض الرئيسية
+# 4. واجهة العرض الرئيسية (في صفحة واحدة وبدون شريط جانبي)
 # ---------------------------------------------------------
 st.markdown(
     "<h1 style='text-align: center; color: #00ff87; margin-bottom: 0;'>⚽ BMS"
@@ -424,41 +339,59 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    "<p style='text-align: center; color: #b1c1d8; font-size: 16px; margin-top:"
-    " 5px;'>المنصة الذكية المتقدمة لإدارة وفحص فريق الفانتسي بلحظيتها</p>",
+    "<p style='text-align: center; color: #b1c1d8; font-size: 15px; margin-top:"
+    " 5px;'>المنصة الذكية المتقدمة لإدارة وفحص فريق الفانتسي في صفحة واحدة</p>",
     unsafe_allow_html=True,
 )
 
-_, _, _, _, deadline_str = fetch_live_fpl_data()
-if deadline_str:
-  try:
-    dl_dt = datetime.datetime.strptime(
-        deadline_str.replace("Z", ""), "%Y-%m-%dT%H:%M:%S"
-    )
-    now_dt = datetime.datetime.utcnow()
-    diff = dl_dt - now_dt
-    if diff.total_seconds() > 0:
-      days = diff.days
-      hours = divmod(diff.seconds, 3600)[0]
-      minutes = divmod(divmod(diff.seconds, 3600)[1], 60)[0]
-      st.markdown(
-          "<div style='text-align: center;'><div"
-          f" class='deadline-badge'>⏳ المتبقي للديدلاين القادم: {days} أيام,"
-          f" {hours} ساعات، {minutes} دقائق</div></div>",
-          unsafe_allow_html=True,
+# شريط إدخال معرف الفريق في أعلى الصفحة الرئيسية مباشرة
+col_top1, col_top2 = st.columns([2, 3])
+with col_top1:
+  user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="3427112")
+
+with col_top2:
+  _, _, _, _, deadline_str = fetch_live_fpl_data()
+  if deadline_str:
+    try:
+      dl_dt = datetime.datetime.strptime(
+          deadline_str.replace("Z", ""), "%Y-%m-%dT%H:%M:%S"
       )
-  except Exception:
-    pass
+      now_dt = datetime.datetime.utcnow()
+      diff = dl_dt - now_dt
+      if diff.total_seconds() > 0:
+        days = diff.days
+        hours = divmod(diff.seconds, 3600)[0]
+        minutes = divmod(divmod(diff.seconds, 3600)[1], 60)[0]
+        st.markdown(
+            "<div style='text-align: right; padding-top: 25px;'><div"
+            f" class='deadline-badge'>⏳ المتبقي للديدلاين القادم: {days} أيام,"
+            f" {hours} ساعات، {minutes} دقائق</div></div>",
+            unsafe_allow_html=True,
+        )
+    except Exception:
+      pass
 
 st.markdown("---")
 
 # ---------------------------------------------------------
-# الأقسام والأدوات بناءً على الاختيار العصري من القائمة الجانبية
+# 5. نظام التبويبات المتكامل (كل الأقسام في صفحة واحدة)
 # ---------------------------------------------------------
-if category == "🏠 لوحة التحكم الرئيسية والدوريات":
-  st.header("🏠 لوحة التحكم الشخصية والدوريات")
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    "🏠 لوحة التحكم",
+    "📊 التشكيلة",
+    "🔄 التبديلات",
+    "👑 الكابتن",
+    "💬 المساعد",
+    "🚑 الإصابات",
+    "📈 الأسعار",
+    "💎 التفاضلي",
+    "🛡️ EO",
+])
+
+with tab1:
+  st.subheader("🏠 لوحة التحكم الشخصية والدوريات")
   if not user_fpl_id:
-    st.warning("⚠️ يرجى إدخال رقم FPL Team ID الخاص بك في القائمة الجانبية.")
+    st.warning("⚠️ يرجى إدخال رقم FPL Team ID الخاص بك في الأعلى.")
   else:
     entry_data = fetch_manager_info(user_fpl_id)
     if not entry_data:
@@ -468,20 +401,20 @@ if category == "🏠 لوحة التحكم الرئيسية والدوريات":
       rank = entry_data.get("summary_overall_rank", 0)
       gw_pts = entry_data.get("summary_event_points", 0)
       team_name = entry_data.get("name", "")
-      col1, col2, col3, col4 = st.columns(4)
-      col1.markdown(
+      c1, c2, c3, c4 = st.columns(4)
+      c1.markdown(
           f'<div class="metric-box"><h3>{pts}</h3><p>إجمالي النقاط</p></div>',
           unsafe_allow_html=True,
       )
-      col2.markdown(
+      c2.markdown(
           f'<div class="metric-box"><h3>{rank:,}</h3><p>الترتيب العام</p></div>',
           unsafe_allow_html=True,
       )
-      col3.markdown(
+      c3.markdown(
           f'<div class="metric-box"><h3>{gw_pts}</h3><p>نقاط الجولة</p></div>',
           unsafe_allow_html=True,
       )
-      col4.markdown(
+      c4.markdown(
           f'<div class="metric-box"><h3>{team_name}</h3><p>اسم الفريق</p></div>',
           unsafe_allow_html=True,
       )
@@ -501,13 +434,13 @@ if category == "🏠 لوحة التحكم الرئيسية والدوريات":
       else:
         st.info("لا توجد دوريات خاصة مسجلة لهذا الحساب.")
 
-elif category == "📊 تحليل التشكيلة وحالة الفريق الحية":
-  st.header("📊 تحليل التشكيلة وحالة الجاهزية البصرية")
+with tab2:
+  st.subheader("📊 تحليل التشكيلة وحالة الجاهزية البصرية")
   expert_tweets = st.text_area(
-      "📥 لصق تغريدات الخبراء ومصادر إكس (اختياري):", height=80
+      "📥 لصق تغريدات الخبراء ومصادر إكس (اختياري):", height=85
   )
   if not user_fpl_id:
-    st.warning("⚠️ أدخل رقم FPL Team ID في القائمة الجانبية.")
+    st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى.")
   else:
     if st.button("🚀 جلب وتحليل التشكيلة الحية"):
       squad, err = fetch_manager_squad(user_fpl_id)
@@ -527,7 +460,7 @@ elif category == "📊 تحليل التشكيلة وحالة الفريق ال�
 
     if "squad_data" in st.session_state:
       squad = st.session_state["squad_data"]
-      st.subheader("🟢 الملعب الافتراضي (مع مؤشرات الجاهزية البصرية)")
+      st.markdown("**🟢 الملعب الافتراضي (مع مؤشرات الجاهزية البصرية):**")
       starting_11 = [p for p in squad if p["position"] <= 11]
       bench = [p for p in squad if p["position"] > 11]
 
@@ -566,12 +499,12 @@ elif category == "📊 تحليل التشكيلة وحالة الفريق ال�
         st.markdown("---")
         st.markdown(st.session_state["cached_analysis"])
 
-elif category == "🔄 مخطط التبديلات الذكي (بالمراكز الدقيقة)":
-  st.header(
+with tab3:
+  st.subheader(
       "🔄 قسم التبديلات الذكية (بناءً على تكتيكات الفرق وجداول الصعوبة)"
   )
   if not user_fpl_id:
-    st.warning("⚠️ أدخل رقم FPL Team ID في القائمة الجانبية.")
+    st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى.")
   else:
     if st.button("🔍 حساب أفضل التبديلات المتاحة"):
       squad, err = fetch_manager_squad(user_fpl_id)
@@ -587,9 +520,9 @@ elif category == "🔄 مخطط التبديلات الذكي (بالمراكز 
         )
         st.markdown(res)
 
-elif category == "👑 مصفوفة الكابتن الاستراتيجية":
-  st.header("👑 أفضل خيارات الكابتن بمنهجية النخبة وتحليل الفرق")
-  if st.button("🚀 تحليل خيارات الكابتن"):
+with tab4:
+  st.subheader("👑 أفضل خيارات الكابتن بمنهجية النخبة وتحليل الفرق")
+  if st.button("🚀 تحليل خيارات الكابتن المتاحة"):
     st.markdown(
         ask_openai(
             "من هم أفضل 3 مرشحين لشارة الكابتن بناءً على تحليل أسلوب دفاع وهجوم"
@@ -597,41 +530,40 @@ elif category == "👑 مصفوفة الكابتن الاستراتيجية":
         )
     )
 
-elif category == "💬 المساعد الذكي والدردشة الفورية":
-  st.header("🗣️ الدردشة الفورية مع BMS bot")
-  query = st.chat_input("اسأل عن أي لاعب أو خطة...")
+with tab5:
+  st.subheader("🗣️ الدردشة الفورية والمساعد الذكي")
+  query = st.text_input("اسأل البوت عن أي لاعب أو خطة أو استراتيجية...")
   if query:
-    st.write(f"**أنت:** {query}")
     ans = ask_openai(query)
-    st.write(f"**BMS bot:** {ans}")
+    st.markdown(f"**BMS bot:** {ans}")
 
-elif category == "🚑 تقرير الإصابات والغيابات الحقيقي":
-  st.header("🚑 تقرير الإصابات الموثوق من السيرفر")
-  if st.button("🚀 عرض الإصابات المؤكدة"):
+with tab6:
+  st.subheader("🚑 تقرير الإصابات الموثوق من السيرفر الرسمي")
+  if st.button("🚀 عرض الإصابات والغيابات الحالية"):
     st.markdown(fetch_injured_players_from_api())
 
-elif category == "📈 رادار تغير الأسعار في السوق":
-  st.header("📈 رادار تغير الأسعار في سوق الفانتسي")
+with tab7:
+  st.subheader("📈 رادار تغير الأسعار في سوق الفانتسي")
   rising, falling = fetch_price_changes_radar()
-  col_1, col_2 = st.columns(2)
-  with col_1:
-    st.subheader("🔥 الأبرز احتمالية لارتفاع السعر")
+  col_r1, col_r2 = st.columns(2)
+  with col_r1:
+    st.markdown("#### 🔥 الأبرز احتمالية لارتفاع السعر")
     for p in rising:
       st.write(
           f"- {p['web_name']} (السعر الحالي: £{p['now_cost']/10}M) 🟢"
       )
-  with col_2:
-    st.subheader("❄️ الأكثر عرضة لانخفاض السعر")
+  with col_r2:
+    st.markdown("#### ❄️ الأكثر عرضة لانخفاض السعر")
     for p in falling:
       st.write(
           f"- {p['web_name']} (السعر الحالي: £{p['now_cost']/10}M) 🔴"
       )
 
-elif category == "💎 كاشف التفاضلي الذهبي (Differential Finder)":
-  st.header("💎 كاشف التفاضلي الذهبي (ملكية أقل من 8%)")
+with tab8:
+  st.subheader("💎 كاشف التفاضلي الذهبي (ملكية أقل من 8%)")
   st.markdown(
       "أبرز اللاعبين ذوي الملكية المنخفضة والذين يقدمون عوائد تهديفية ممتازة"
-      " لرفع ترتيبك الصاروخي بناءً على دراسة تكتيكات الفرق:"
+      " لرفع ترتيبك:"
   )
   diffs = fetch_differential_finders()
   if diffs:
@@ -648,8 +580,8 @@ elif category == "💎 كاشف التفاضلي الذهبي (Differential Find
   else:
     st.info("جاري تحديث بيانات اللاعبين التفاضليين...")
 
-elif category == "🛡️ (EO) مؤشر الملكية المؤثرة":
-  st.header("🛡️ المؤشر المؤثر للملكية (Effective Ownership)")
-  p_in = st.text_input("أدخل اسم اللاعب:")
+with tab9:
+  st.subheader("🛡️ المؤشر المؤثر للملكية (Effective Ownership)")
+  p_in = st.text_input("أدخل اسم اللاعب لفحص مخاطر عدم امتلاكه:")
   if p_in:
     st.markdown(ask_openai(f"ما هو تأثير ومخاطر عدم امتلاك اللاعب {p_in}?"))
