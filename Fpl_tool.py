@@ -49,7 +49,7 @@ section[data-testid="stSidebar"] { background-color: #1a002c !important; border-
 )
 
 
-# 2. جلب الحفظ التلقائي للمفاتيح (Railway / Streamlit)
+# 2. قراءة المفاتيح (Railway & Streamlit Secrets)
 def get_secret(key_name, default=""):
     if key_name in os.environ:
         return os.environ[key_name]
@@ -71,7 +71,7 @@ with st.sidebar:
         "مفتاح Gemini API:",
         value=secrets_gemini,
         type="password",
-        help="المفتاح مفعل تلقائياً من الإعدادات",
+        help="المفتاح مفعل تلقائياً",
     )
     user_fpl_id = st.text_input(
         "معرف فريقك (FPL Team ID):",
@@ -87,20 +87,22 @@ with st.sidebar:
     st.markdown("---")
     st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-# 4. توجيه الخبراء واستدعاء الذكاء الاصطناعي
+# 4. توجيه صارم لمنع طباعة مسودات التفكير والالتزام التام باللغة العربية
 SYSTEM_PROMPT = """
 أنت مستشار ومحلل بيانات فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
 تعتمد في استراتيجياتك وتوصياتك على دمج البيانات المباشرة مع الرؤى التكتيكية لأبرز خبراء الفانتسي العرب على منصة X وهم:
 (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
 
-قواعد وإرشادات التحليل الإجباري:
-1. اللغة العربية الفصحى السلسة 100%: يُمنع تماماً استخدام أي كلمات أو مصطلحات باللغة الإنجليزية داخل الأقواس لتفادي تشويه النص العربي.
-   - استخدم البدائل العربية: الأهداف المتوقعة، التمريرات الحاسمة المتوقعة، الخيار التفاضلي، الخيار الأساسي الشائع، الكروت والخصائص، الضربات الثابتة، نسبة الملكية العالية.
-2. الالتزام بالبيانات الحقيقية: جميع أسماء اللاعبين والأندية المرسلة إليك هي بيانات رسمية من FPL API لموسم 2026/2027، يمنع التشكيك بها أو اقتراح لاعبين غير موجودين بـ FPL.
-3. عدم كتابة مقدمات: ادخل في صلب التحليل الرقمي مباشرة وبدون أي كلام إنشائي أو تنبيهات جانبية.
+قواعد حاسمة:
+1. إخراج النص النهائي المباشر فقط: يُمنع منعاً باتاً طباعة أي أفكار جانبية أو مسودات تفكير باللغة الإنجليزية (يُمنع كتابة Drafting أو Self-Correction أو Reviewing أو أي شروط).
+2. لغة عربية فصحى 100%: يُمنع كتابة أي كلمات أو مصطلحات أو أندية باللغة الإنجليزية بين الأقواس لتفادي تشويه تنسيق النص.
+   - البدائل العربية: الأهداف المتوقعة، التمريرات الحاسمة المتوقعة، الخيار التفاضلي، الخيار الأساسي الشائع، الكروت والخصائص، الضربات الثابتة، نسبة الملكية العالية.
+3. الالتزام المطلق ببيانات الطلب: اعتمد فقط وحصراً على أسماء اللاعبين وأنديتهم المرفقة لك في نص التشكيلة المباشرة المأخوذة من API لموسم 2026/2027.
+4. الدخول المباشر: ابدأ بالتحليل فوراً وبدون أي مقدمات أو كلام إنشائي.
 """
 
 
+# استدعاء سريع بدون فحص شبكي بطيء لتسريع الأداء
 def ask_gemini(prompt_text, extra_context=""):
     if not secrets_gemini:
         return "⚠️ يرجى إدخال مفتاح Gemini API في القائمة الجانبية أو في متغيرات Railway."
@@ -112,50 +114,48 @@ def ask_gemini(prompt_text, extra_context=""):
         if extra_context:
             full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للتحليل والدمج:\n{extra_context}"
 
-        available_models = []
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
+        )
+        response = model.generate_content(full_prompt)
+
+        if response and response.text:
+            clean_text = response.text
+            # فلترة نصوص المسودات إن وجدت لضمان النظافة التامة
+            for noise in [
+                "Drafting",
+                "Self-Correction",
+                "Reviewing",
+                "Arabic text:",
+            ]:
+                if noise in clean_text:
+                    clean_text = clean_text.split(noise)[-1].strip()
+            return clean_text
+
+    except Exception:
         try:
-            for m in genai.list_models():
-                if "generateContent" in m.supported_generation_methods:
-                    available_models.append(m.name)
-        except Exception:
-            pass
+            model = genai.GenerativeModel(
+                model_name="gemini-2.0-flash", system_instruction=SYSTEM_PROMPT
+            )
+            response = model.generate_content(full_prompt)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            return f"⚠️ خطأ في الاتصال: {str(e)}"
 
-        if not available_models:
-            available_models = [
-                "gemini-1.5-flash",
-                "gemini-2.0-flash",
-                "gemini-1.5-pro",
-            ]
-
-        last_error = ""
-        for model_name in available_models:
-            try:
-                model = genai.GenerativeModel(
-                    model_name=model_name, system_instruction=SYSTEM_PROMPT
-                )
-                response = model.generate_content(full_prompt)
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                last_error = str(e)
-                continue
-
-        return f"⚠️ تعذر الحصول على رد: {last_error}"
-
-    except Exception as e:
-        return f"⚠️ خطأ في الاتصال: {str(e)}"
+    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
 
 
-# 5. وظائف جلب البيانات المباشرة من FPL API
+# 5. وظائف جلب البيانات المباشرة مع التخزين المؤقت (Caching) لحل البطء
 def get_json(url):
     try:
-        res = requests.get(url, timeout=8)
+        res = requests.get(url, timeout=5)
         return res.json() if res.status_code == 200 else None
     except Exception:
         return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)
 def fetch_live_fpl_data():
     static_data = get_json(
         "https://fantasy.premierleague.com/api/bootstrap-static/"
@@ -171,14 +171,20 @@ def fetch_live_fpl_data():
     return players, teams, types, static_data
 
 
+@st.cache_data(ttl=300)
+def fetch_manager_info(manager_id):
+    return get_json(
+        f"https://fantasy.premierleague.com/api/entry/{manager_id}/"
+    )
+
+
+@st.cache_data(ttl=300)
 def fetch_manager_squad(manager_id):
     players, teams, types, _ = fetch_live_fpl_data()
     if not players:
         return None, "تعذر جلب بيانات الفانتسي العامة حالياً."
 
-    entry_data = get_json(
-        f"https://fantasy.premierleague.com/api/entry/{manager_id}/"
-    )
+    entry_data = fetch_manager_info(manager_id)
     if not entry_data:
         return None, "رقم الفريق غير صحيح أو يتعذر الوصول له."
 
@@ -200,7 +206,6 @@ def fetch_manager_squad(manager_id):
             "is_vice": pick.get("is_vice_captain", False),
             "position": pick.get("position", 1),
             "price": p_info.get("now_cost", 0) / 10,
-            "form": p_info.get("form", "0.0"),
         })
     return squad, None
 
@@ -232,61 +237,53 @@ if category == "🏠 الصفحة الرئيسية (نقاطي والدوريا�
             "⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية لعرض نقاطك ودورياتك."
         )
     else:
-        with st.spinner("جاري جلب بيانات حسابك والدوريات..."):
-            entry_data = get_json(
-                f"https://fantasy.premierleague.com/api/entry/{secrets_fpl_id}/"
-            )
-            if not entry_data:
-                st.error("تعذر جلب البيانات. أعد التأكد من رقم الفريق.")
-            else:
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.markdown(
-                        f'<div class="metric-box"><h3>{entry_data.get("summary_overall_points", 0)}</h3><p>إجمالي النقاط</p></div>',
-                        unsafe_allow_html=True,
-                    )
-                with col2:
-                    st.markdown(
-                        f'<div class="metric-box"><h3>{entry_data.get("summary_overall_rank", 0):,}</h3><p>الترتيب العام</p></div>',
-                        unsafe_allow_html=True,
-                    )
-                with col3:
-                    st.markdown(
-                        f'<div class="metric-box"><h3>{entry_data.get("summary_event_points", 0)}</h3><p>نقاط الجولة الأخيرة</p></div>',
-                        unsafe_allow_html=True,
-                    )
-                with col4:
-                    st.markdown(
-                        f'<div class="metric-box"><h3>{entry_data.get("name", "")}</h3><p>{entry_data.get("player_first_name", "")} {entry_data.get("player_last_name", "")}</p></div>',
-                        unsafe_allow_html=True,
-                    )
-
-                st.markdown("---")
-                st.subheader("🏆 الدوريات الخاصة المنسق بها (Classic Leagues)")
-
-                classic_leagues = (
-                    entry_data.get("leagues", {}).get("classic", [])
+        entry_data = fetch_manager_info(secrets_fpl_id)
+        if not entry_data:
+            st.error("تعذر جلب البيانات. أعد التأكد من رقم الفريق.")
+        else:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(
+                    f'<div class="metric-box"><h3>{entry_data.get("summary_overall_points", 0)}</h3><p>إجمالي النقاط</p></div>',
+                    unsafe_allow_html=True,
                 )
-                if classic_leagues:
-                    league_data = []
-                    for lg in classic_leagues:
-                        league_data.append({
-                            "اسم الدوري": lg.get("name"),
-                            "ترتيبك الحالي": lg.get("entry_rank"),
-                            "الترتيب السابق": lg.get("entry_last_rank"),
-                        })
-                    st.table(league_data)
-                else:
-                    st.info("لا توجد دوريات خاصة مسجلة لهذا الحساب.")
+            with col2:
+                st.markdown(
+                    f'<div class="metric-box"><h3>{entry_data.get("summary_overall_rank", 0):,}</h3><p>الترتيب العام</p></div>',
+                    unsafe_allow_html=True,
+                )
+            with col3:
+                st.markdown(
+                    f'<div class="metric-box"><h3>{entry_data.get("summary_event_points", 0)}</h3><p>نقاط الجولة الأخيرة</p></div>',
+                    unsafe_allow_html=True,
+                )
+            with col4:
+                st.markdown(
+                    f'<div class="metric-box"><h3>{entry_data.get("name", "")}</h3><p>{entry_data.get("player_first_name", "")} {entry_data.get("player_last_name", "")}</p></div>',
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+            st.subheader("🏆 الدوريات الخاصة المنسق بها (Classic Leagues)")
+
+            classic_leagues = entry_data.get("leagues", {}).get("classic", [])
+            if classic_leagues:
+                league_data = []
+                for lg in classic_leagues:
+                    league_data.append({
+                        "اسم الدوري": lg.get("name"),
+                        "ترتيبك الحالي": lg.get("entry_rank"),
+                        "الترتيب السابق": lg.get("entry_last_rank"),
+                    })
+                st.table(league_data)
+            else:
+                st.info("لا توجد دوريات خاصة مسجلة لهذا الحساب.")
 
 # ---------------------------------------------------------
-# 🔄 قسم خاص لتبديلات الجولة
+# 🔄 قسم التبديلات الموصى بها
 # ---------------------------------------------------------
 elif category == "🔄 مخطط التبديلات الموصى بها للجولة":
     st.header("🔄 قسم التبديلات المخصصة لكل جولة")
-    st.write(
-        "يعتمد هذا القسم على تحليل أسعار فريقك، معدلات الفرص المتوقعة، وتقارير الخبراء المرفقة."
-    )
 
     expert_input = st.text_area(
         "📥 لصق تغريدات أو تحليلات الخبراء المباشرة (اختياري):",
@@ -295,23 +292,23 @@ elif category == "🔄 مخطط التبديلات الموصى بها للجو�
     )
 
     if not secrets_fpl_id:
-        st.warning("⚠️ يرجى أدخال رقم FPL Team ID في القائمة الجانبية.")
+        st.warning("⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية.")
     else:
         if st.button("🔍 حساب أفضل 2 تبديلات للجولة القادمة"):
-            with st.spinner("جاري مطابقة أرقام تشكيلتك مع خيارات السوق..."):
+            with st.spinner("جاري تحليل تشكيلتك ومطابقتها مع السوق..."):
                 squad, err = fetch_manager_squad(secrets_fpl_id)
                 if err:
                     st.error(err)
                 else:
                     squad_txt = ", ".join([
-                        f"{p['name']} ({p['pos']} - {p['team']} - السعر: {p['price']}M)"
+                        f"{p['name']} ({p['pos']} - {p['team']} - السعر: {p['price']} مليون)"
                         for p in squad
                     ])
                     transfer_prompt = f"""
-                    بناءً على التشكيلة التالية لموسم 2026/2027: [{squad_txt}].
+                    بناءً على التشكيلة المرفقة لموسم 2026/2027: [{squad_txt}].
                     قدم توصيتين محددتين للتبديل للجولة القادمة:
-                    1. 🔄 **التبديل الأول (الأولوية القصوى):** اسم اللاعب المغادر، اسم اللاعب البديل، ومبرر الأهداف والتمريرات المتوقعة ومواعيد المباريات.
-                    2. 🔄 **التبديل الثاني (اختياري/تفاضلي):** اسم المغادر والبديل ونسبة المخاطرة.
+                    1. التبديل الأول (الأولوية القصوى): اسم اللاعب المغادر، اسم اللاعب البديل، ومبرر الأهداف والتمريرات المتوقعة ومواعيد المباريات.
+                    2. التبديل الثاني (اختياري/تفاضلي): اسم المغادر والبديل ونسبة المخاطرة.
                     """
                     res = ask_gemini(transfer_prompt, extra_context=expert_input)
                     st.markdown(res)
@@ -332,7 +329,7 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
         st.warning("⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية.")
     else:
         if st.button("🚀 جلب وتحليل التشكيلة بـ ID"):
-            with st.spinner("جاري رسم الملعب وتوليد التقرير..."):
+            with st.spinner("جاري تحليل التشكيلة..."):
                 squad, err = fetch_manager_squad(secrets_fpl_id)
                 if err:
                     st.error(err)
@@ -390,7 +387,7 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
                     st.write(analysis)
 
 # ---------------------------------------------------------
-# باقي الأقسام الخفيفة السريعة
+# باقي الأقسام الخفيفة
 # ---------------------------------------------------------
 elif category == "💬 المساعد الصوتي والدردشة":
     st.header("🗣️ الدردشة والاستفسارات المباشرة")
