@@ -27,6 +27,12 @@ section[data-testid="stSidebar"] { background-color: #1a002c !important; border-
 .stTextInput input, .stSelectbox select, .stNumberInput input, .stTextArea textarea {
     background-color: #240038 !important; color: #ffffff !important; border: 1px solid #00ff87 !important; border-radius: 8px;
 }
+.metric-box {
+    background: rgba(36, 0, 56, 0.8); border: 1px solid #00ff87; border-radius: 12px;
+    padding: 15px; text-align: center; margin-bottom: 10px;
+}
+.metric-box h3 { color: #00ff87; margin: 0; font-size: 24px; }
+.metric-box p { color: #ffffff; margin: 5px 0 0 0; font-size: 14px; }
 .pitch-container {
     background: linear-gradient(180deg, #1e7145 0%, #114b2d 100%);
     border: 2px solid #00ff87; border-radius: 15px; padding: 20px 10px; margin-bottom: 15px;
@@ -43,7 +49,7 @@ section[data-testid="stSidebar"] { background-color: #1a002c !important; border-
 )
 
 
-# 2. الحفظ التلقائي للمفاتيح (دعم Railway و Streamlit Secrets)
+# 2. جلب الحفظ التلقائي للمفاتيح (Railway / Streamlit)
 def get_secret(key_name, default=""):
     if key_name in os.environ:
         return os.environ[key_name]
@@ -79,22 +85,19 @@ with st.sidebar:
         secrets_fpl_id = user_fpl_id
 
     st.markdown("---")
-    st.caption("تغطية حية لموسم 2026/2027 ⚽")
+    st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
 # 4. توجيه الخبراء واستدعاء الذكاء الاصطناعي
 SYSTEM_PROMPT = """
-أنت مستشار وتحليلي بيانات فانتسي البريميرليج (FPL) الأعلى تقييماً لموسم 2026/2027.
-تعتمد في استراتيجياتك وتوصياتك على دمج الرؤى التكتيكية والإحصائية لأبرز محللي الفانتسي العرب على منصة X وهم:
+أنت مستشار ومحلل بيانات فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
+تعتمد في استراتيجياتك وتوصياتك على دمج البيانات المباشرة مع الرؤى التكتيكية لأبرز خبراء الفانتسي العرب على منصة X وهم:
 (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
 
 قواعد وإرشادات التحليل الإجباري:
-1. التشكيلة المرسلة دقيقة ومحدثة 100% لموسم 2026/2027 من FPL API؛ يمنع التشكيك في أندية اللاعبين أو الانتقالات تماماً.
-2. ادخل في صلب التحليل مباشرة وبدون أي مقدمات أو كلام إنشائي أو تنبيهات جانبية.
-3. اعتمد على الإحصائيات المتقدمة: الأهداف المتوقعة (xG)، التمريرات الحاسمة المتوقعة (xA)، جدول المواجهات (FDR)، والملكية المؤثرة (EO).
-4. قسّم التقرير دائماً إلى 3 أجزاء مرتبة كالتالي:
-   - 🔍 **تشخيص التشكيلة وفحص الثقوب:** (اللاعبون المصابون، دكة الخمول، المواجهات المعقدة).
-   - 🔄 **التوصية بالتبديل الأفضل (Best Transfer):** (تحديد المغادر والبديل الأنسب بناءً على xG/xA وجدول الجولات القادمة).
-   - 👑 **ترشيح الكابتن:** (خيار آمن أصحاب الملكية العالية + خيار تفاضلي Differential مع التبرير الرقمي).
+1. اللغة العربية الفصحى السلسة 100%: يُمنع تماماً استخدام أي كلمات أو مصطلحات باللغة الإنجليزية داخل الأقواس لتفادي تشويه النص العربي.
+   - استخدم البدائل العربية: الأهداف المتوقعة، التمريرات الحاسمة المتوقعة، الخيار التفاضلي، الخيار الأساسي الشائع، الكروت والخصائص، الضربات الثابتة، نسبة الملكية العالية.
+2. الالتزام بالبيانات الحقيقية: جميع أسماء اللاعبين والأندية المرسلة إليك هي بيانات رسمية من FPL API لموسم 2026/2027، يمنع التشكيك بها أو اقتراح لاعبين غير موجودين بـ FPL.
+3. عدم كتابة مقدمات: ادخل في صلب التحليل الرقمي مباشرة وبدون أي كلام إنشائي أو تنبيهات جانبية.
 """
 
 
@@ -107,9 +110,8 @@ def ask_gemini(prompt_text, extra_context=""):
 
         full_prompt = prompt_text
         if extra_context:
-            full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للاستئناس بها:\n{extra_context}"
+            full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للتحليل والدمج:\n{extra_context}"
 
-        # جلب الموديلات المدعومة تلقائياً لمنع أخطاء 404
         available_models = []
         try:
             for m in genai.list_models():
@@ -138,7 +140,7 @@ def ask_gemini(prompt_text, extra_context=""):
                 last_error = str(e)
                 continue
 
-        return f"⚠️ تعذر الحصول على رد من الموديلات المتاحة: {last_error}"
+        return f"⚠️ تعذر الحصول على رد: {last_error}"
 
     except Exception as e:
         return f"⚠️ خطأ في الاتصال: {str(e)}"
@@ -159,18 +161,18 @@ def fetch_live_fpl_data():
         "https://fantasy.premierleague.com/api/bootstrap-static/"
     )
     if not static_data:
-        return None, None, None
+        return None, None, None, None
     players = {p["id"]: p for p in static_data["elements"]}
     teams = {t["id"]: t["name"] for t in static_data["teams"]}
     types = {
         et["id"]: et["singular_name_short"]
         for et in static_data["element_types"]
     }
-    return players, teams, types
+    return players, teams, types, static_data
 
 
 def fetch_manager_squad(manager_id):
-    players, teams, types = fetch_live_fpl_data()
+    players, teams, types, _ = fetch_live_fpl_data()
     if not players:
         return None, "تعذر جلب بيانات الفانتسي العامة حالياً."
 
@@ -197,71 +199,140 @@ def fetch_manager_squad(manager_id):
             "is_captain": pick.get("is_captain", False),
             "is_vice": pick.get("is_vice_captain", False),
             "position": pick.get("position", 1),
+            "price": p_info.get("now_cost", 0) / 10,
+            "form": p_info.get("form", "0.0"),
         })
     return squad, None
 
 
-# 6. الواجهة الرئيسية والتنقل (مخففة ومسرعة)
+# 6. الواجهة الرئيسية والتنقل
 st.title("⚽ بوت الفانتسي الذكي المباشر")
 
 category = st.selectbox(
     "اختر القسم المطلوب 📍",
     [
-        "💬 المساعد الصوتي والدردشة",
+        "🏠 الصفحة الرئيسية (نقاطي والدوريات)",
+        "🔄 مخطط التبديلات الموصى بها للجولة",
         "📊 تحليل التشكيلة والتقرير اليومي",
-        "🛡️ (EO) مؤشر الملكية المؤثرة",
-        "🎯 (Chips) مخطط الخصائص",
-        "🚨 مخطط التهديدات الـ 3 القادمة",
-        "🚑 رادار الإصابات والغيابات",
+        "💬 المساعد الصوتي والدردشة",
         "👑 مصفوفة الكابتن",
+        "🚑 رادار الإصابات والغيابات",
+        "🛡️ (EO) مؤشر الملكية المؤثرة",
     ],
 )
 
 # ---------------------------------------------------------
-# القسم الأول: المساعد الصوتي والدردشة
+# 🏠 الصفحة الرئيسية: نقاطي المباشرة والدوريات
 # ---------------------------------------------------------
-if category == "💬 المساعد الصوتي والدردشة":
-    st.header("🗣️ الدردشة والاستفسارات المباشرة")
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+if category == "🏠 الصفحة الرئيسية (نقاطي والدوريات)":
+    st.header("🏠 لوحة التحكم الشخصية والدوريات")
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-
-    user_query = st.chat_input("اسأل عن أي لاعب، مؤتمر، أو تبديل...")
-    if user_query:
-        st.session_state.messages.append(
-            {"role": "user", "content": user_query}
+    if not secrets_fpl_id:
+        st.warning(
+            "⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية لعرض نقاطك ودورياتك."
         )
-        with st.chat_message("user"):
-            st.write(user_query)
+    else:
+        with st.spinner("جاري جلب بيانات حسابك والدوريات..."):
+            entry_data = get_json(
+                f"https://fantasy.premierleague.com/api/entry/{secrets_fpl_id}/"
+            )
+            if not entry_data:
+                st.error("تعذر جلب البيانات. أعد التأكد من رقم الفريق.")
+            else:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.markdown(
+                        f'<div class="metric-box"><h3>{entry_data.get("summary_overall_points", 0)}</h3><p>إجمالي النقاط</p></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col2:
+                    st.markdown(
+                        f'<div class="metric-box"><h3>{entry_data.get("summary_overall_rank", 0):,}</h3><p>الترتيب العام</p></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col3:
+                    st.markdown(
+                        f'<div class="metric-box"><h3>{entry_data.get("summary_event_points", 0)}</h3><p>نقاط الجولة الأخيرة</p></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col4:
+                    st.markdown(
+                        f'<div class="metric-box"><h3>{entry_data.get("name", "")}</h3><p>{entry_data.get("player_first_name", "")} {entry_data.get("player_last_name", "")}</p></div>',
+                        unsafe_allow_html=True,
+                    )
 
-        with st.chat_message("assistant"):
-            with st.spinner("جاري التفكير..."):
-                answer = ask_gemini(user_query)
-                st.write(answer)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": answer}
+                st.markdown("---")
+                st.subheader("🏆 الدوريات الخاصة المنسق بها (Classic Leagues)")
+
+                classic_leagues = (
+                    entry_data.get("leagues", {}).get("classic", [])
                 )
+                if classic_leagues:
+                    league_data = []
+                    for lg in classic_leagues:
+                        league_data.append({
+                            "اسم الدوري": lg.get("name"),
+                            "ترتيبك الحالي": lg.get("entry_rank"),
+                            "الترتيب السابق": lg.get("entry_last_rank"),
+                        })
+                    st.table(league_data)
+                else:
+                    st.info("لا توجد دوريات خاصة مسجلة لهذا الحساب.")
 
 # ---------------------------------------------------------
-# القسم الثاني: تحليل التشكيلة والتقرير اليومي
+# 🔄 قسم خاص لتبديلات الجولة
+# ---------------------------------------------------------
+elif category == "🔄 مخطط التبديلات الموصى بها للجولة":
+    st.header("🔄 قسم التبديلات المخصصة لكل جولة")
+    st.write(
+        "يعتمد هذا القسم على تحليل أسعار فريقك، معدلات الفرص المتوقعة، وتقارير الخبراء المرفقة."
+    )
+
+    expert_input = st.text_area(
+        "📥 لصق تغريدات أو تحليلات الخبراء المباشرة (اختياري):",
+        placeholder="انسخ هنا آخر التغريدات الخاصة بالتبديلات والتسريبات...",
+        height=90,
+    )
+
+    if not secrets_fpl_id:
+        st.warning("⚠️ يرجى أدخال رقم FPL Team ID في القائمة الجانبية.")
+    else:
+        if st.button("🔍 حساب أفضل 2 تبديلات للجولة القادمة"):
+            with st.spinner("جاري مطابقة أرقام تشكيلتك مع خيارات السوق..."):
+                squad, err = fetch_manager_squad(secrets_fpl_id)
+                if err:
+                    st.error(err)
+                else:
+                    squad_txt = ", ".join([
+                        f"{p['name']} ({p['pos']} - {p['team']} - السعر: {p['price']}M)"
+                        for p in squad
+                    ])
+                    transfer_prompt = f"""
+                    بناءً على التشكيلة التالية لموسم 2026/2027: [{squad_txt}].
+                    قدم توصيتين محددتين للتبديل للجولة القادمة:
+                    1. 🔄 **التبديل الأول (الأولوية القصوى):** اسم اللاعب المغادر، اسم اللاعب البديل، ومبرر الأهداف والتمريرات المتوقعة ومواعيد المباريات.
+                    2. 🔄 **التبديل الثاني (اختياري/تفاضلي):** اسم المغادر والبديل ونسبة المخاطرة.
+                    """
+                    res = ask_gemini(transfer_prompt, extra_context=expert_input)
+                    st.markdown(res)
+
+# ---------------------------------------------------------
+# 📊 تحليل التشكيلة والتقرير اليومي
 # ---------------------------------------------------------
 elif category == "📊 تحليل التشكيلة والتقرير اليومي":
     st.header("📊 تحليل التشكيلة وحالة الفريق")
 
     expert_tweets = st.text_area(
-        "📥 لصق تغريدات أو تقارير الخبراء (اختياري):",
-        placeholder="انسخ هنا آخر تغريدة من @arabsfpl أو @adelculer أو @ali7amer للربط مع تشكيلتك...",
-        height=100,
+        "📥 لصق تغريدات الخبراء للدمج مع التقرير (اختياري):",
+        placeholder="ضع هنا تغريدات الخبراء لمطابقتها مع تشكيلتك...",
+        height=90,
     )
 
     if not secrets_fpl_id:
         st.warning("⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية.")
     else:
         if st.button("🚀 جلب وتحليل التشكيلة بـ ID"):
-            with st.spinner("جاري جلب البيانات ورسم الملعب..."):
+            with st.spinner("جاري رسم الملعب وتوليد التقرير..."):
                 squad, err = fetch_manager_squad(secrets_fpl_id)
                 if err:
                     st.error(err)
@@ -288,9 +359,9 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
                         )
                         for p in row_players:
                             cap_tag = (
-                                " (C)"
+                                " (كابتن)"
                                 if p["is_captain"]
-                                else (" (VC)" if p["is_vice"] else "")
+                                else (" (نائب)" if p["is_vice"] else "")
                             )
                             st.markdown(
                                 f'<div class="player-card">{p["name"]}{cap_tag}<span>{p["team"]}</span></div>',
@@ -318,52 +389,53 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
                     )
                     st.write(analysis)
 
-                    st.subheader("📱 ملخص للنسخ (WhatsApp)")
-                    wa_summary = (
-                        f"📊 *تقرير تشكيلة الفانتسي*\n\n{analysis[:350]}..."
-                    )
-                    st.code(wa_summary, language="text")
-
 # ---------------------------------------------------------
 # باقي الأقسام الخفيفة السريعة
 # ---------------------------------------------------------
-elif category == "🛡️ (EO) مؤشر الملكية المؤثرة":
-    st.header("🛡️ المؤشر المؤثر للملكية (Effective Ownership)")
-    st.info(
-        "يساعدك هذا المؤشر على معرفة تأثير تألق اللاعب على ترتيبك في الدوري."
-    )
-    player_input = st.text_input("ادخل اسم اللاعب لمعاينة نسبة مخاطرته:")
-    if player_input:
-        res = ask_gemini(
-            f"ما هي نسبة الملكية الكلية والمؤثرة المقدرة للاعب {player_input} وما هي خطورة عدم امتلاكه؟"
+elif category == "💬 المساعد الصوتي والدردشة":
+    st.header("🗣️ الدردشة والاستفسارات المباشرة")
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    user_query = st.chat_input("اسأل عن أي لاعب، مؤتمر، أو تبديل...")
+    if user_query:
+        st.session_state.messages.append(
+            {"role": "user", "content": user_query}
         )
-        st.write(res)
+        with st.chat_message("user"):
+            st.write(user_query)
 
-elif category == "🎯 (Chips) مخطط الخصائص":
-    st.header("🎯 التخطيط لاستخدام الخصائص (Chips)")
-    st.write("أفضل الفترات المقترحة لاستخدام (Wildcard, Free Hit, Bench Boost):")
-    res = ask_gemini(
-        "أعطني استراتيجية سريعة ومختصرة لاستخدام خواص الفانتسي هذا الموسم."
-    )
-    st.write(res)
+        with st.chat_message("assistant"):
+            with st.spinner("جاري التفكير..."):
+                answer = ask_gemini(user_query)
+                st.write(answer)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer}
+                )
 
-elif category == "🚨 مخطط التهديدات الـ 3 القادمة":
-    st.header("🚨 التهديدات وصعوبة المواجهات القادمة")
+elif category == "👑 مصفوفة الكابتن":
+    st.header("👑 أفضل خيارات الكابتن للجولة")
     res = ask_gemini(
-        "اذكر لي أصعب 3 فرق لديها جدول مواجهات معقد في الجولات الثلاث القادمة."
+        "من هم أفضل 3 لاعبين مرشحين لشارة الكابتن للجولة القادمة مع توضيح خيار آمن وخيار تفاضلي باللغة العربية الفصحى؟"
     )
     st.write(res)
 
 elif category == "🚑 رادار الإصابات والغيابات":
     st.header("🚑 أهم الغيابات والإصابات المؤكدة")
     res = ask_gemini(
-        "يلخص لي قائمة بـ 5 لاعبين مهمين مصابين أو مشكوك بمشاركتهم للجولة القادمة بالفانتسي."
+        "يلخص لي قائمة بأهم 5 لاعبين مصابين أو مشكوك بمشاركتهم للجولة القادمة في فانتسي الدوري الإنجليزي."
     )
     st.write(res)
 
-elif category == "👑 مصفوفة الكابتن":
-    st.header("👑 أفضل 3 خيارات للكابتن")
-    res = ask_gemini(
-        "من هم أفضل 3 لاعبين مرشحين لارتداء شارة الكابتن بالجولة القادمة مع نسبة المخاطرة؟"
-    )
-    st.write(res)
+elif category == "🛡️ (EO) مؤشر الملكية المؤثرة":
+    st.header("🛡️ المؤشر المؤثر للملكية")
+    player_input = st.text_input("ادخل اسم اللاعب لمعاينة نسبة مخاطرته:")
+    if player_input:
+        res = ask_gemini(
+            f"ما هي خطورة عدم امتلاك اللاعب {player_input} وما هو تأثيره على الترتيب العام؟"
+        )
+        st.write(res)
