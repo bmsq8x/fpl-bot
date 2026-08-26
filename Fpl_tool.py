@@ -64,10 +64,14 @@ def get_secret(key_name, default=""):
   return default
 
 
+# إدراج المفتاح الخاص بك بشكل افتراضي ومضمون
+DEFAULT_KEY = "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"
+
 secrets_openai = (
     get_secret("OPENAI_API_KEY")
     or get_secret("openai_key")
     or get_secret("OPENAI_KEY")
+    or DEFAULT_KEY
 )
 secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 
@@ -100,7 +104,7 @@ with st.sidebar:
 
 
 # ---------------------------------------------------------
-# 4. وظائف جلب بيانات FPL وصعوبة المباريات (FDR)
+# 4. وظائف جلب بيانات FPL المباشرة وصعوبة المباريات (FDR)
 # ---------------------------------------------------------
 def get_json(url):
   try:
@@ -110,7 +114,7 @@ def get_json(url):
     return None
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def fetch_live_fpl_data():
   """جلب البيانات الأساسية الرسمية للاعبين والأندية بأسعارهم الحالية الدقيقة"""
   static_data = get_json(
@@ -126,7 +130,26 @@ def fetch_live_fpl_data():
   return players, teams, types, static_data
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=120)
+def fetch_top_fpl_players_data():
+  """جلب قائمة بأهم 50 لاعباً حالياً في الفانتسي مع أنديتهم وأسعارهم الرسمية"""
+  players, teams, _, _ = fetch_live_fpl_data()
+  if not players:
+    return ""
+  top_p = sorted(
+      players.values(),
+      key=lambda x: float(x.get("selected_by_percent", 0) or 0),
+      reverse=True,
+  )[:50]
+  info = [
+      f"- {p['web_name']} ({teams.get(p['team'])}): Price £{p['now_cost']/10}M,"
+      f" Selected {p['selected_by_percent']}%"
+      for p in top_p
+  ]
+  return "\n".join(info)
+
+
+@st.cache_data(ttl=120)
 def fetch_fixtures_difficulty():
   """جلب صعوبة المباريات القادمة (FDR) لكل الأندية"""
   fixtures = get_json("https://fantasy.premierleague.com/api/fixtures/")
@@ -142,18 +165,18 @@ def fetch_fixtures_difficulty():
     a_diff = f.get("team_a_difficulty", 3)
     gw = f.get("event", 1)
     fdr_summary.append(
-        f"الجولة {gw}: صاحب الأرض (فريق {h_team} - صعوبة: {h_diff}/5) ضد الضيف"
-        f" (فريق {a_team} - صعوبة: {a_diff}/5)"
+        f"GW {gw}: Team {h_team} (Difficulty: {h_diff}/5) vs Team {a_team}"
+        f" (Difficulty: {a_diff}/5)"
     )
   return "\n".join(fdr_summary[:15])
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def fetch_manager_info(manager_id):
   return get_json(f"https://fantasy.premierleague.com/api/entry/{manager_id}/")
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def fetch_manager_squad(manager_id):
   players, teams, types, _ = fetch_live_fpl_data()
   if not players:
@@ -173,7 +196,6 @@ def fetch_manager_squad(manager_id):
   squad = []
   for pick in picks_data.get("picks", []):
     p_info = players.get(pick["element"], {})
-    # السعر الدقيق من FPL الرسمية (now_cost مقسوماً على 10)
     exact_price = round(p_info.get("now_cost", 0) / 10.0, 1)
 
     squad.append({
@@ -192,38 +214,33 @@ def fetch_manager_squad(manager_id):
 
 
 # ---------------------------------------------------------
-# 5. التوجيه ودوال الاتصال بـ OpenAI مع دمج الخبراء و FDR
+# 5. التوجيه ودوال الاتصال بـ OpenAI مع حظر الهلوسة
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
 أنت المستشار والخبير الرئيسي لـ FPL الدوري الإنجليزي الممتاز لموسم 2026/2027.
-تعتمد تحليلاتك على البيانات المباشرة من FPL API (الأسعار الدقيقة، نسبة الملكية، وصعوبة المباريات FDR من 1 أسهل شيء إلى 5 أصعب شيء).
-كما تطابق التحليلات مع آراء واستراتيجيات الخبراء العرب المحددين:
-(@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
+تعتمد تحليلاتك حواً وحصرياً على البيانات المباشرة المرفقة في الطلب.
 
-قواعد التحليل:
-1. التزم بالأسعار الرسمية المرفقة تماماً وبأندية موسم 2026/2027 الرسمية.
-2. حلل المباريات بناءً على مؤشر الصعوبة (FDR):
-   - 1 و 2: مواجهة سهلة جداً (فرصة ممتازة للكابتن أو الشراء).
-   - 3: مواجهة متوازنة/متوسطة.
-   - 4 و 5: مواجهة معقدة وشديدة الصعوبة (مخاطرة).
-3. أخرج التقرير باللغة العربية الفصحى الواضحة والاحترافية.
+قواعد صارمة جداً لمنع الهلوسة ومعلومات الذاكرة القديمة:
+1. يمنع منعاً باتاً ذكر أي لاعب غادر الدوري الإنجليزي الممتاز (مثل هاري كين) أو تغيير أندية اللاعبين (مثل ادعاء انتقال محمد صلاح لطرابزون).
+2. يجب التقيُّد التام والكامل بالأسعار الرسمية المرفقة معك في نص الطلب (مثال: سعر هالاند وصلاح وبرونو المذكور بالطلب فقط).
+3. آراء واستراتيجيات الخبراء العرب للاسترشاد بها: (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
+4. أخرج التقرير باللغة العربية الفصحى الواضحة والاحترافية.
 """
 
 
 def ask_openai(prompt_text, extra_context=""):
   if not secrets_openai:
-    return (
-        "⚠️ يرجى إدخال مفتاح OpenAI API في القائمة الجانبية أو في متغيرات"
-        " Railway."
-    )
+    return "⚠️ يرجى إدخال مفتاح OpenAI API في القائمة الجانبية."
 
   try:
     client = OpenAI(api_key=secrets_openai)
     fdr_data = fetch_fixtures_difficulty()
+    live_players = fetch_top_fpl_players_data()
 
     full_prompt = (
-        f"{prompt_text}\n\n📊 [بيانات جدول صعوبة المباريات القادمة (FDR)"
-        f" المباشرة]:\n{fdr_data}"
+        f"{prompt_text}\n\n"
+        f"📊 [قائمة أهم لاعبي الفانتسي بالدوري الإنجليزي بالأسعار الحقيقية والأندية الحالية]:\n{live_players}\n\n"
+        f"📅 [بيانات جدول صعوبة المباريات FDR]:\n{fdr_data}"
     )
     if extra_context:
       full_prompt += f"\n\n📌 [تغريدات وتحليلات الخبراء المرفقة]:\n{extra_context}"
@@ -234,7 +251,7 @@ def ask_openai(prompt_text, extra_context=""):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": full_prompt},
         ],
-        temperature=0.2,
+        temperature=0.1,  # تقليل الحرارة لأدنى درجة لمنع الابتكار الخاطئ
         max_tokens=2000,
     )
 
@@ -352,15 +369,13 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
               for p in squad
           ])
           ai_prompt = (
-              "تشكيلة المستخدم الرسمية بالأسعار المحدثة لموسم 2026/2027 هي:"
-              f" [{squad_txt}].\nقدم تحليلاً شاملاً لمستوى التشكيلة، ومستوى"
-              " صعوبة مبارياتهم القادمة، واقتراح الكابتن والبدلاء بناءً على"
-              " أسعارهم الرسمية المرفقة."
+              "تشكيلة المستخدم الرسمية والحية لموسم 2026/2027 بالأسعار"
+              f" المحددة هي: [{squad_txt}].\nقدم تحليلاً شاملاً للتشكيلة،"
+              " واقتراح البدلاء والكابتن بناءً على صعوبة المواجهات القادمة"
+              " والأسعار المرفقة حصراً."
           )
 
-          with st.spinner(
-              "جاري التنسيق مع OpenAI وتحليل جدول صعوبة المباريات (FDR)..."
-          ):
+          with st.spinner("جاري التنسيق مع OpenAI وتحليل البيانات الحية..."):
             st.session_state["cached_analysis"] = ask_openai(
                 ai_prompt, extra_context=expert_tweets
             )
@@ -429,10 +444,10 @@ elif category == "🔄 مخطط التبديلات الموصى بها للجو�
               for p in squad
           ])
           transfer_prompt = f"""
-                    تشكيلة المستخدم الحالية وأسعارها: [{squad_txt}].
+                    تشكيلة المستخدم الحالية وأسعارها الرسمية: [{squad_txt}].
                     
-                    بناءً على جدول صعوبة المباريات المرفق وآراء الخبراء:
-                    1. رشح أفضل تبديل ضروري (اللاعب الخروج وسعر بديله القادم ومستوى مواجهته القادمة).
+                    بناءً على الأسعار المرفقة وجدول الصعوبة المباشر:
+                    1. رشح أفضل تبديل ضروري (اللاعب الخروج والبديل والسعر ومستوى صعوبة المباراة).
                     2. رشح تبديل تفاضلي اختياري.
                     """
           st.session_state["cached_transfers"] = ask_openai(
@@ -450,9 +465,9 @@ elif category == "👑 مصفوفة الكابتن ومستوى المباريا
   if st.button("🚀 تحليل خيارات الكابتن للجولة"):
     with st.spinner("جاري تحليل مواجهات النجوم وصعوبة المباريات..."):
       res = ask_openai(
-          "من هم أفضل 3 مرشحين لشارة الكابتن للجولة القادمة؟ حدد اسم"
-          " اللاعب، وسعره، وسهولة/صعوبة مبارياته القادمة (FDR) مع إعطاء خيار"
-          " آمن وخيار تفاضلي باللغة العربية الفصحى."
+          "من هم أفضل 3 مرشحين لشارة الكابتن للجولة القادمة بناءً على قائمة"
+          " نجوم الدوري المرفقة بالأسعار المحددة حصراً؟ اعرض الكابتن مع توضيح"
+          " سعره وخياره الآمن والتفاضلي."
       )
       st.markdown(res)
 
@@ -468,7 +483,7 @@ elif category == "💬 المساعد الصوتي والدردشة":
     with st.chat_message(msg["role"]):
       st.write(msg["content"])
 
-  user_query = st.chat_input("اسأل عن سعر أي لاعب، صعوبة مباراته، أو خيار كابتن...")
+  user_query = st.chat_input("اسأل عن أي لاعب أو خيار كابتن...")
   if user_query:
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
@@ -487,8 +502,8 @@ elif category == "🚑 رادار الإصابات والغيابات":
   if st.button("🚀 جلب تقرير الغيابات الرسمية"):
     with st.spinner("جاري فحص حالة اللاعبين حياً..."):
       res = ask_openai(
-          "اعرض لي أهم اللاعبين المصابين أو المشكوك بمشاركتهم للجولة القادمة مع"
-          " توضيح تأثير غيابهم تكتيكياً."
+          "اعرض لي أهم اللاعبين المصابين أو المشكوك بمشاركتهم للجولة القادمة من"
+          " فرق الدوري الإنجليزي الحالية."
       )
       st.markdown(res)
 
@@ -498,6 +513,6 @@ elif category == "🛡️ (EO) مؤشر الملكية المؤثرة":
   if player_input:
     res = ask_openai(
         f"ما هي نسبة خطورة عدم امتلاك اللاعب {player_input} ومستوى صعوبة"
-        " مبارياته القادمة؟"
+        " مبارياته القادمة بناءً على البيانات الرسمية المرفقة؟"
     )
     st.markdown(res)
