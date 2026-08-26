@@ -1,8 +1,7 @@
 import os
-import re
-import google.generativeai as genai
 import requests
 import streamlit as st
+from openai import OpenAI
 
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة والتصميم البصري (CSS)
@@ -64,7 +63,11 @@ def get_secret(key_name, default=""):
   return default
 
 
-secrets_gemini = get_secret("GEMINI_API_KEY") or get_secret("gemini_key")
+secrets_openai = (
+    get_secret("OPENAI_API_KEY")
+    or get_secret("openai_key")
+    or get_secret("OPENAI_KEY")
+)
 secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 
 # ---------------------------------------------------------
@@ -72,141 +75,80 @@ secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 # ---------------------------------------------------------
 with st.sidebar:
   st.title("⚙️ الإعدادات والربط")
-  user_gemini_key = st.text_input(
-      "مفتاح Gemini API:",
-      value=secrets_gemini,
+
+  user_openai_key = st.text_input(
+      "مفتاح OpenAI API:",
+      value=secrets_openai,
       type="password",
-      help="المفتاح مفعل تلقائياً من الحساب المدفوع",
+      placeholder="sk-proj-...",
   )
+
   user_fpl_id = st.text_input(
       "معرف فريقك (FPL Team ID):",
       value=secrets_fpl_id,
       placeholder="مثال: 3427112",
   )
 
-  if user_gemini_key:
-    secrets_gemini = user_gemini_key
+  if user_openai_key:
+    secrets_openai = user_openai_key
   if user_fpl_id:
     secrets_fpl_id = user_fpl_id
 
   st.markdown("---")
   st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-
 # ---------------------------------------------------------
-# 4. دالة التنظيف المتقدمة ودالة الاتصال بالذكاء الاصطناعي
+# 4. التوجيه ودوال الاتصال بـ OpenAI
 # ---------------------------------------------------------
-def extract_arabic_content(text):
-  """استخراج النص العربي الصافي وإلغاء أي مسودات تفكير إنجليزية بنسبة 100%"""
-  if not text:
-    return ""
-
-  lines = text.split("\n")
-  clean_lines = []
-
-  for line in lines:
-    l_str = line.strip()
-    if not l_str:
-      clean_lines.append("")
-      continue
-
-    # استبعاد أي أسطر تحتوي على كلمات التفكير والمسودات الإنجليزية
-    l_lower = l_str.lower()
-    if any(
-        kw in l_lower
-        for kw in [
-            "drafting",
-            "self-correction",
-            "reviewing",
-            "thinking",
-            "note on",
-            "rule 1",
-            "rule 2",
-            "rule 3",
-            "arabic text",
-            "final output",
-            "let's check",
-            "checking",
-        ]
-    ):
-      continue
-
-    # التأكد من أن السطر يحتوي على أسطر عربية أو تنسيق markdown
-    has_arabic = bool(re.search(r"[\u0600-\u06FF]", l_str))
-    is_markdown_symbol = l_str.startswith(("#", "*", "-", "1.", "2.", "3.", "4."))
-
-    if has_arabic or is_markdown_symbol:
-      clean_lines.append(l_str)
-
-  result = "\n".join(clean_lines).strip()
-  return (
-      result
-      if result
-      else "⚠️ جاري معالجة الرد، يرجى إعادة الضغط على الزر مرة أخرى."
-  )
-
-
 SYSTEM_PROMPT = """
 أنت مستشار وخبير فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
 تعتمد على دمج بيانات FPL المباشرة مع آراء كبار الخبراء العرب: (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
 
-قواعد صارمة جداً:
-1. الإجابة تكون باللغة العربية الفصحى المباشرة والمكتملة فقط.
-2. ممنوع منعاً باتاً كتابة أي أفكار جانبية أو مسودات تفكير باللغة الإنجليزية.
-3. التزم بأسماء اللاعبين وأنديتهم الرسمية المرفقة في البيانات (موسم 2026/2027). لا تغير أندية اللاعبين بناءً على ذاكرتك القديمة.
-4. ابدأ بالتحليل مباشرة وبدون أي مقدمات إنجليزية أو إنشائية.
+تعليمات حاسمة:
+1. اكتب الإجابة والتحليل باللغة العربية الفصحى المباشرة والمكتملة فقط.
+2. ممنوع طباعة أي أفكار جانبية أو مسودات تفكير بالإنجليزية.
+3. التزم تماماً بأسماء اللاعبين وأنديتهم الرسمية المرفقة في طلب التشكيلة لموسم 2026/2027.
 """
 
 
-def ask_gemini(prompt_text, extra_context=""):
-  if not secrets_gemini:
+def ask_openai(prompt_text, extra_context=""):
+  if not secrets_openai:
     return (
-        "⚠️ يرجى إدخال مفتاح Gemini API في القائمة الجانبية أو في متغيرات"
+        "⚠️ يرجى إدخال مفتاح OpenAI API في القائمة الجانبية أو في متغيرات"
         " Railway."
     )
 
   try:
-    genai.configure(api_key=secrets_gemini)
-
-    full_prompt = (
-        f"{SYSTEM_PROMPT}\n\n[الطلب والمُعطيات الحية]:\n{prompt_text}"
-    )
+    client = OpenAI(api_key=secrets_openai)
+    full_prompt = prompt_text
     if extra_context:
-      full_prompt += f"\n\n[تغريدات وتقارير إضافية]:\n{extra_context}"
+      full_prompt += f"\n\n📌 معطيات وتغريدات الخبراء للتحليل:\n{extra_context}"
 
-    # استخدام الموديل المستقر المباشر دون تعقيد
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": full_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=2000,
+    )
 
-    # إعدادات بسيطة متوافقة مع كل إصدارات المكتبة
-    config = {"temperature": 0.2, "max_output_tokens": 2048}
-
-    response = model.generate_content(full_prompt, generation_config=config)
-
-    if response and response.text:
-      return extract_arabic_content(response.text)
+    if response.choices and response.choices[0].message.content:
+      return response.choices[0].message.content.strip()
 
   except Exception as e:
-    # محاولة بديلة بموديل gemini-1.5-pro في حال وجود أي ضغط
-    try:
-      model_alt = genai.GenerativeModel("gemini-1.5-pro")
-      response_alt = model_alt.generate_content(
-          full_prompt, generation_config={"temperature": 0.2}
-      )
-      if response_alt and response_alt.text:
-        return extract_arabic_content(response_alt.text)
-    except Exception:
-      pass
-    return f"⚠️ خطأ في الاتصال: {str(e)}"
+    return f"⚠️ خطأ في الاتصال بـ OpenAI: {str(e)}"
 
-  return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
+  return "⚠️ تعذر الحصول على رد من OpenAI."
 
 
 # ---------------------------------------------------------
-# 5. وظائف جلب بيانات FPL المباشرة والسريعة (Cached)
+# 5. وظائف جلب بيانات FPL المباشرة (Cached)
 # ---------------------------------------------------------
 def get_json(url):
   try:
-    res = requests.get(url, timeout=5)
+    res = requests.get(url, timeout=4)
     return res.json() if res.status_code == 200 else None
   except Exception:
     return None
@@ -297,33 +239,35 @@ if category == "🏠 الصفحة الرئيسية (نقاطي والدوريا�
     if not entry_data:
       st.error("تعذر جلب البيانات. أعد التأكد من رقم الفريق.")
     else:
+      pts = entry_data.get("summary_overall_points", 0)
+      rank = entry_data.get("summary_overall_rank", 0)
+      gw_pts = entry_data.get("summary_event_points", 0)
+      team_name = entry_data.get("name", "")
+      f_name = entry_data.get("player_first_name", "")
+      l_name = entry_data.get("player_last_name", "")
+
       col1, col2, col3, col4 = st.columns(4)
       with col1:
         st.markdown(
-            f'<div'
-            ' class="metric-box"><h3>{entry_data.get("summary_overall_points",'
-            " 0)}</h3><p>إجمالي النقاط</p></div>",
+            f'<div class="metric-box"><h3>{pts}</h3><p>إجمالي النقاط</p></div>',
             unsafe_allow_html=True,
         )
       with col2:
         st.markdown(
-            f'<div'
-            ' class="metric-box"><h3>{entry_data.get("summary_overall_rank",'
-            " 0):,}</h3><p>الترتيب العام</p></div>",
+            f'<div class="metric-box"><h3>{rank:,}</h3><p>الترتيب'
+            " العام</p></div>",
             unsafe_allow_html=True,
         )
       with col3:
         st.markdown(
-            f'<div'
-            ' class="metric-box"><h3>{entry_data.get("summary_event_points",'
-            " 0)}</h3><p>نقاط الجولة الأخيرة</p></div>",
+            f'<div class="metric-box"><h3>{gw_pts}</h3><p>نقاط الجولة'
+            " الأخيرة</p></div>",
             unsafe_allow_html=True,
         )
       with col4:
         st.markdown(
-            f'<div class="metric-box"><h3>{entry_data.get("name",'
-            ' "")}</h3><p>{entry_data.get("player_first_name",'
-            ' "")} {entry_data.get("player_last_name", "")}</p></div>',
+            f'<div class="metric-box"><h3>{team_name}</h3><p>{f_name}'
+            f" {l_name}</p></div>",
             unsafe_allow_html=True,
         )
 
@@ -372,8 +316,8 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
               " للجولة القادمة بالعربية الفصحى فقط."
           )
 
-          with st.spinner("جاري إعداد التقرير التكتيكي..."):
-            st.session_state["cached_analysis"] = ask_gemini(
+          with st.spinner("جاري إعداد التقرير التكتيكي عبر OpenAI..."):
+            st.session_state["cached_analysis"] = ask_openai(
                 ai_prompt, extra_context=expert_tweets
             )
 
@@ -397,8 +341,10 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
               if p["is_captain"]
               else (" (نائب)" if p["is_vice"] else "")
           )
+          p_name = p["name"]
+          p_team = p["team"]
           st.markdown(
-              f'<div class="player-card">{p["name"]}{cap_tag}<span>{p["team"]}</span></div>',
+              f'<div class="player-card">{p_name}{cap_tag}<span>{p_team}</span></div>',
               unsafe_allow_html=True,
           )
         st.markdown("</div>", unsafe_allow_html=True)
@@ -446,7 +392,7 @@ elif category == "🔄 مخطط التبديلات الموصى بها للجو�
                     1. التبديل الأول (الأولوية القصوى): اسم المغادر والبديل ونظرة تكتيكية.
                     2. التبديل الثاني (اختياري/تفاضلي): اسم المغادر والبديل ونسبة المخاطرة.
                     """
-          st.session_state["cached_transfers"] = ask_gemini(
+          st.session_state["cached_transfers"] = ask_openai(
               transfer_prompt, extra_context=expert_input
           )
 
@@ -473,7 +419,7 @@ elif category == "💬 المساعد الصوتي والدردشة":
 
     with st.chat_message("assistant"):
       with st.spinner("جاري التفكير..."):
-        answer = ask_gemini(user_query)
+        answer = ask_openai(user_query)
         st.write(answer)
         st.session_state.messages.append(
             {"role": "assistant", "content": answer}
@@ -483,7 +429,7 @@ elif category == "👑 مصفوفة الكابتن":
   st.header("👑 أفضل خيارات الكابتن للجولة")
   if st.button("🚀 عرض ترشيحات الكابتن"):
     with st.spinner("جاري التحليل..."):
-      res = ask_gemini(
+      res = ask_openai(
           "من هم أفضل 3 لاعبين مرشحين لشارة الكابتن للجولة القادمة مع توضيح"
           " خيار آمن وخيار تفاضلي باللغة العربية الفصحى؟"
       )
@@ -493,7 +439,7 @@ elif category == "🚑 رادار الإصابات والغيابات":
   st.header("🚑 أهم الغيابات والإصابات المؤكدة")
   if st.button("🚀 عرض قائمة الغيابات"):
     with st.spinner("جاري جلب القائمة..."):
-      res = ask_gemini(
+      res = ask_openai(
           "يلخص لي قائمة بأهم 5 لاعبين مصابين أو مشكوك بمشاركتهم للجولة"
           " القادمة في فانتسي الدوري الإنجليزي."
       )
@@ -503,7 +449,7 @@ elif category == "🛡️ (EO) مؤشر الملكية المؤثرة":
   st.header("🛡️ المؤشر المؤثر للملكية")
   player_input = st.text_input("ادخل اسم اللاعب لمعاينة نسبة مخاطرته:")
   if player_input:
-    res = ask_gemini(
+    res = ask_openai(
         f"ما هي خطورة عدم امتلاك اللاعب {player_input} وما هو تأثيره على"
         " الترتيب العام؟"
     )
