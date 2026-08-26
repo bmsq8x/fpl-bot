@@ -4,7 +4,7 @@ import google.generativeai as genai
 import requests
 import streamlit as st
 
-# 1. إعدادات الصفحة والتصميم البصري (CSS)
+# 1. إعدادات الصفحة والتصميم البصري (CSS المسرّع)
 st.set_page_config(
     page_title="مدير الفانتسي الذكي 2026/2027",
     layout="wide",
@@ -48,7 +48,7 @@ section[data-testid="stSidebar"] { background-color: #1a002c !important; border-
 )
 
 
-# 2. قراءة المفاتيح
+# 2. قراءة المفاتيح (Railway & Streamlit Secrets)
 def get_secret(key_name, default=""):
     if key_name in os.environ:
         return os.environ[key_name]
@@ -63,7 +63,7 @@ def get_secret(key_name, default=""):
 secrets_gemini = get_secret("GEMINI_API_KEY") or get_secret("gemini_key")
 secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 
-# 3. القائمة الجانبية
+# 3. القائمة الجانبية (Sidebar)
 with st.sidebar:
     st.title("⚙️ الإعدادات والربط")
     user_gemini_key = st.text_input(
@@ -86,22 +86,22 @@ with st.sidebar:
     st.markdown("---")
     st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-# 4. التوجيه المباشر والسريع للنموذج
+# 4. توجيه صارم ومتقدم
 SYSTEM_PROMPT = """
 أنت مستشار ومحلل بيانات فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
-تعتمد في توصياتك على الرؤى التكتيكية لأبرز خبراء الفانتسي العرب:
+تعتمد في استراتيجياتك وتوصياتك على دمج البيانات المباشرة مع الرؤى التكتيكية لأبرز خبراء الفانتسي العرب:
 (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
 
-تعليمات حاسمة للاستجابة السريعة:
-1. اكتب النتيجة النهائية فقط باللغة العربية الفصحى مباشرة.
-2. يُمنع منعاً باتاً طباعة أي مسودات أو تفكير إنجليزي (ممنوع طباعة Drafting, Rule, Checking, Notes).
-3. يُمنع كتابة الكلمات الإنجليزية بين الأقواس.
-4. التزم بأسماء وأندية اللاعبين المرسلة لك في التشكيلة المباشرة لموسم 2026/2027.
+تعليمات حاسمة:
+1. اكتب النتيجة النهائية المباشرة فقط باللغة العربية الفصحى.
+2. يُمنع منعاً باتاً طباعة أي مسودات تفكير باللغة الإنجليزية (يُمنع كتابة Drafting أو Self-Correction أو Reviewing أو Rule).
+3. يُمنع كتابة أسماء اللاعبين أو الأندية باللغة الإنجليزية بين الأقواس.
+4. الالتزام المطلق ببيانات الأندية واللاعبين لموسم 2026/2027 المرسلة لك في نص الطلب.
 """
 
 
-def clean_text_output(text):
-    """تصفية سريعة لإلغاء أي أسطر إنجليزية مسربة"""
+def clean_response(text):
+    """فلترة صارمة لإزالة أي أسطر تفكير إنجليزية مفاجئة"""
     if not text:
         return ""
     clean_lines = []
@@ -118,6 +118,7 @@ def clean_text_output(text):
                 "checking",
                 "arabic text:",
                 "final polish",
+                "one last look",
             ]
         ):
             continue
@@ -132,30 +133,54 @@ def ask_gemini(prompt_text, extra_context=""):
     try:
         genai.configure(api_key=secrets_gemini)
 
+        # 1. جلب الموديلات المتاحة لحسابك ديناميكياً لتجنب أخطاء 404 نهائياً
+        working_models = []
+        try:
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    working_models.append(m.name)
+        except Exception:
+            pass
+
+        # 2. صمام أمان بأسماء الموديلات القياسية في حال تعذر القراءة الديناميكية
+        if not working_models:
+            working_models = [
+                "gemini-1.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-pro",
+                "models/gemini-1.5-flash",
+                "models/gemini-2.0-flash",
+            ]
+
         full_prompt = prompt_text
         if extra_context:
             full_prompt += f"\n\n📌 معطيات إضافية للتحليل:\n{extra_context}"
 
-        # إعدادات التوليد السريع (بدون تفكير مطول لتجنب البطء)
         gen_config = genai.types.GenerationConfig(
             temperature=0.1, max_output_tokens=1000
         )
 
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
-        )
+        last_error = ""
+        for model_id in working_models:
+            try:
+                model = genai.GenerativeModel(
+                    model_name=model_id, system_instruction=SYSTEM_PROMPT
+                )
+                response = model.generate_content(
+                    full_prompt,
+                    generation_config=gen_config,
+                    request_options={"timeout": 15},
+                )
+                if response and response.text:
+                    return clean_response(response.text)
+            except Exception as e:
+                last_error = str(e)
+                continue
 
-        response = model.generate_content(
-            full_prompt, generation_config=gen_config
-        )
-
-        if response and response.text:
-            return clean_text_output(response.text)
+        return f"⚠️ تعذر الاتصال بموديلات Gemini المتاحة: {last_error}"
 
     except Exception as e:
         return f"⚠️ خطأ في الاتصال: {str(e)}"
-
-    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
 
 
 # 5. وظائف جلب البيانات المباشرة مع Caching لتسريع الموقع
@@ -193,7 +218,7 @@ def get_top_fpl_targets_2026():
         players.values(),
         key=lambda x: float(x.get("selected_by_percent", 0) or 0),
         reverse=True,
-    )[:80]
+    )[:100]
     target_list = [
         f"{p['web_name']} ({teams.get(p['team'])})" for p in top_players
     ]
