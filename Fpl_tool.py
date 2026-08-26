@@ -87,7 +87,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-# 4. توجيه صارم لمنع طباعة مسودات التفكير والالتزام التام باللغة العربية
+# 4. توجيه صارم لمنع المسودات ومراعاة الفصاحة الكاملة
 SYSTEM_PROMPT = """
 أنت مستشار ومحلل بيانات فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
 تعتمد في استراتيجياتك وتوصياتك على دمج البيانات المباشرة مع الرؤى التكتيكية لأبرز خبراء الفانتسي العرب على منصة X وهم:
@@ -102,7 +102,21 @@ SYSTEM_PROMPT = """
 """
 
 
-# استدعاء سريع بدون فحص شبكي بطيء لتسريع الأداء
+# جلب الموديلات الشغالة وتخزينها مؤقتاً لتجنب أخطاء 404 والبطء
+@st.cache_data(ttl=3600)
+def get_working_models(api_key):
+    try:
+        genai.configure(api_key=api_key)
+        available = []
+        for m in genai.list_models():
+            if "generateContent" in m.supported_generation_methods:
+                clean_name = m.name.replace("models/", "")
+                available.append(clean_name)
+        return available
+    except Exception:
+        return ["gemini-1.5-flash", "gemini-1.5-pro"]
+
+
 def ask_gemini(prompt_text, extra_context=""):
     if not secrets_gemini:
         return "⚠️ يرجى إدخال مفتاح Gemini API في القائمة الجانبية أو في متغيرات Railway."
@@ -114,39 +128,40 @@ def ask_gemini(prompt_text, extra_context=""):
         if extra_context:
             full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للتحليل والدمج:\n{extra_context}"
 
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
-        )
-        response = model.generate_content(full_prompt)
+        available_models = get_working_models(secrets_gemini)
+        if not available_models:
+            available_models = ["gemini-1.5-flash", "gemini-1.5-pro"]
 
-        if response and response.text:
-            clean_text = response.text
-            # فلترة نصوص المسودات إن وجدت لضمان النظافة التامة
-            for noise in [
-                "Drafting",
-                "Self-Correction",
-                "Reviewing",
-                "Arabic text:",
-            ]:
-                if noise in clean_text:
-                    clean_text = clean_text.split(noise)[-1].strip()
-            return clean_text
+        last_error = ""
+        for model_name in available_models:
+            try:
+                model = genai.GenerativeModel(
+                    model_name=model_name, system_instruction=SYSTEM_PROMPT
+                )
+                response = model.generate_content(full_prompt)
 
-    except Exception:
-        try:
-            model = genai.GenerativeModel(
-                model_name="gemini-2.0-flash", system_instruction=SYSTEM_PROMPT
-            )
-            response = model.generate_content(full_prompt)
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            return f"⚠️ خطأ في الاتصال: {str(e)}"
+                if response and response.text:
+                    clean_text = response.text
+                    for noise in [
+                        "Drafting",
+                        "Self-Correction",
+                        "Reviewing",
+                        "Arabic text:",
+                    ]:
+                        if noise in clean_text:
+                            clean_text = clean_text.split(noise)[-1].strip()
+                    return clean_text
+            except Exception as e:
+                last_error = str(e)
+                continue
 
-    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
+        return f"⚠️ تعذر الحصول على رد من الموديلات المتاحة: {last_error}"
+
+    except Exception as e:
+        return f"⚠️ خطأ في الاتصال: {str(e)}"
 
 
-# 5. وظائف جلب البيانات المباشرة مع التخزين المؤقت (Caching) لحل البطء
+# 5. وظائف جلب البيانات المباشرة مع Caching لحل البطء
 def get_json(url):
     try:
         res = requests.get(url, timeout=5)
