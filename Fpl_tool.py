@@ -1,11 +1,10 @@
 import datetime
 import os
-import re
 import google.generativeai as genai
 import requests
 import streamlit as st
 
-# 1. إعدادات الصفحة والتصميم البصري (CSS المسرّع)
+# 1. إعدادات الصفحة والتصميم البصري (CSS)
 st.set_page_config(
     page_title="مدير الفانتسي الذكي 2026/2027",
     layout="wide",
@@ -49,7 +48,7 @@ section[data-testid="stSidebar"] { background-color: #1a002c !important; border-
 )
 
 
-# 2. قراءة المفاتيح (Railway & Streamlit Secrets)
+# 2. قراءة المفاتيح
 def get_secret(key_name, default=""):
     if key_name in os.environ:
         return os.environ[key_name]
@@ -64,7 +63,7 @@ def get_secret(key_name, default=""):
 secrets_gemini = get_secret("GEMINI_API_KEY") or get_secret("gemini_key")
 secrets_fpl_id = get_secret("FPL_ID") or get_secret("fpl_id")
 
-# 3. القائمة الجانبية (Sidebar)
+# 3. القائمة الجانبية
 with st.sidebar:
     st.title("⚙️ الإعدادات والربط")
     user_gemini_key = st.text_input(
@@ -87,61 +86,43 @@ with st.sidebar:
     st.markdown("---")
     st.caption("تغطية حية ومباشرة لموسم 2026/2027 ⚽")
 
-# 4. توجيه صارم ومتقدم
+# 4. التوجيه المباشر والسريع للنموذج
 SYSTEM_PROMPT = """
 أنت مستشار ومحلل بيانات فانتسي الدوري الإنجليزي الممتاز (FPL) لموسم 2026/2027.
-تعتمد في استراتيجياتك وتوصياتك على دمج البيانات المباشرة مع الرؤى التكتيكية لأبرز خبراء الفانتسي العرب على منصة X وهم:
+تعتمد في توصياتك على الرؤى التكتيكية لأبرز خبراء الفانتسي العرب:
 (@ali7amer, @adelculer, @fplab17, @arabsfpl, @fpljoker1, @fpl_ucf, @kluivertq8).
 
-قواعد صارمة وإلزامية:
-1. إخراج النص النهائي المباشر فقط باللغة العربية الفصحى: يُمنع منعاً باتاً طباعة أي أفكار جانبية، مسودات تفكير، أو مراجعات باللغة الإنجليزية (مثل Drafting, Self-Correction, Reviewing, Note on Rule).
-2. لغة عربية صافية 100%: يُمنع كتابة أسماء اللاعبين أو الأندية أو المصطلحات باللغة الإنجليزية بين الأقواس لتفادي تشويه تنسيق النص.
-3. الالتزام المطلق ببيانات الأندية واللاعبين لموسم 2026/2027 المرسلة لك في نص الطلب. يُمنع التشكيك في أندية اللاعبين أو الاعتماد على ذاكرتك القديمة.
-4. الدخول المباشر في التحليل والتوصيات بدون أي مقدمات أو كلام إنشائي.
+تعليمات حاسمة للاستجابة السريعة:
+1. اكتب النتيجة النهائية فقط باللغة العربية الفصحى مباشرة.
+2. يُمنع منعاً باتاً طباعة أي مسودات أو تفكير إنجليزي (ممنوع طباعة Drafting, Rule, Checking, Notes).
+3. يُمنع كتابة الكلمات الإنجليزية بين الأقواس.
+4. التزم بأسماء وأندية اللاعبين المرسلة لك في التشكيلة المباشرة لموسم 2026/2027.
 """
 
 
-def clean_response(text):
-    """فلترة صارمة لإزالة أي أسطر تفكير إنجليزية مفاجئة"""
+def clean_text_output(text):
+    """تصفية سريعة لإلغاء أي أسطر إنجليزية مسربة"""
     if not text:
         return ""
-    lines = text.split("\n")
     clean_lines = []
-    for line in lines:
-        lower_l = line.lower().strip()
+    for line in text.split("\n"):
+        line_lower = line.lower().strip()
         if any(
-            k in lower_l
-            for k in [
-                "one last look",
-                "note on rule",
+            bad in line_lower
+            for bad in [
+                "rule",
                 "drafting",
                 "self-correction",
-                "final polish",
-                "actually, looking",
-                "rule 1:",
-                "rule 2:",
-                "rule 3:",
-                "reviewing against rules",
+                "reviewing",
+                "note on",
+                "checking",
                 "arabic text:",
+                "final polish",
             ]
         ):
             continue
         clean_lines.append(line)
     return "\n".join(clean_lines).strip()
-
-
-@st.cache_data(ttl=3600)
-def get_working_models(api_key):
-    try:
-        genai.configure(api_key=api_key)
-        available = []
-        for m in genai.list_models():
-            if "generateContent" in m.supported_generation_methods:
-                clean_name = m.name.replace("models/", "")
-                available.append(clean_name)
-        return available
-    except Exception:
-        return ["gemini-1.5-flash", "gemini-1.5-pro"]
 
 
 def ask_gemini(prompt_text, extra_context=""):
@@ -151,42 +132,36 @@ def ask_gemini(prompt_text, extra_context=""):
     try:
         genai.configure(api_key=secrets_gemini)
 
-        # إضافة بيانات 300 لاعب من موسم 2026/2027 للسياق دائماً لتجنب الهلوسة
-        live_300_context = get_top_fpl_targets_2026()
-        full_prompt = (
-            f"{prompt_text}\n\nبيانات لاعبي موسم 2026/2027 المحدثة للاسترشاد بها: [{live_300_context}]"
-        )
+        full_prompt = prompt_text
         if extra_context:
-            full_prompt += f"\n\n📌 تقارير وتغريدات إضافية من الخبراء للتحليل والدمج:\n{extra_context}"
+            full_prompt += f"\n\n📌 معطيات إضافية للتحليل:\n{extra_context}"
 
-        available_models = get_working_models(secrets_gemini)
-        if not available_models:
-            available_models = ["gemini-1.5-flash", "gemini-1.5-pro"]
+        # إعدادات التوليد السريع (بدون تفكير مطول لتجنب البطء)
+        gen_config = genai.types.GenerationConfig(
+            temperature=0.1, max_output_tokens=1000
+        )
 
-        last_error = ""
-        for model_name in available_models:
-            try:
-                model = genai.GenerativeModel(
-                    model_name=model_name, system_instruction=SYSTEM_PROMPT
-                )
-                response = model.generate_content(full_prompt)
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
+        )
 
-                if response and response.text:
-                    return clean_response(response.text)
-            except Exception as e:
-                last_error = str(e)
-                continue
+        response = model.generate_content(
+            full_prompt, generation_config=gen_config
+        )
 
-        return f"⚠️ تعذر الحصول على رد من الموديلات المتاحة: {last_error}"
+        if response and response.text:
+            return clean_text_output(response.text)
 
     except Exception as e:
         return f"⚠️ خطأ في الاتصال: {str(e)}"
 
+    return "⚠️ تعذر الحصول على رد، يرجى المحاولة لاحقاً."
 
-# 5. وظائف جلب البيانات المباشرة مع Caching لحل البطء
+
+# 5. وظائف جلب البيانات المباشرة مع Caching لتسريع الموقع
 def get_json(url):
     try:
-        res = requests.get(url, timeout=5)
+        res = requests.get(url, timeout=4)
         return res.json() if res.status_code == 200 else None
     except Exception:
         return None
@@ -210,7 +185,7 @@ def fetch_live_fpl_data():
 
 @st.cache_data(ttl=600)
 def get_top_fpl_targets_2026():
-    """تجهيز أعلى 300 لاعب في الدوري الإنجليزي بأنديتهم الرسمية المحدثة لموسم 2026/2027"""
+    """جلب أهم الخيارات المحدثة لموسم 2026/2027 باختصار لمنع البطء"""
     players, teams, _, _ = fetch_live_fpl_data()
     if not players:
         return ""
@@ -218,7 +193,7 @@ def get_top_fpl_targets_2026():
         players.values(),
         key=lambda x: float(x.get("selected_by_percent", 0) or 0),
         reverse=True,
-    )[:300]
+    )[:80]
     target_list = [
         f"{p['web_name']} ({teams.get(p['team'])})" for p in top_players
     ]
@@ -334,7 +309,7 @@ if category == "🏠 الصفحة الرئيسية (نقاطي والدوريا�
                 st.info("لا توجد دوريات خاصة مسجلة لهذا الحساب.")
 
 # ---------------------------------------------------------
-# 🔄 قسم التبديلات الموصى بها (محتفظ بالنتائج لمنع البطء)
+# 🔄 قسم التبديلات الموصى بها
 # ---------------------------------------------------------
 elif category == "🔄 مخطط التبديلات الموصى بها للجولة":
     st.header("🔄 قسم التبديلات المخصصة لكل جولة")
@@ -349,20 +324,22 @@ elif category == "🔄 مخطط التبديلات الموصى بها للجو�
         st.warning("⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية.")
     else:
         if st.button("🔍 حساب أفضل 2 تبديلات للجولة القادمة"):
-            with st.spinner("جاري تحليل تشكيلتك ومطابقتها مع 300 لاعب..."):
+            with st.spinner("جاري حساب التبديلات فوراً..."):
                 squad, err = fetch_manager_squad(secrets_fpl_id)
                 if err:
                     st.error(err)
                 else:
+                    live_targets = get_top_fpl_targets_2026()
                     squad_txt = ", ".join([
                         f"{p['name']} ({p['pos']} - {p['team']} - السعر: {p['price']} مليون)"
                         for p in squad
                     ])
                     transfer_prompt = f"""
-                    تشكيلة المستخدم الحالية: [{squad_txt}].
+                    تشكيلة المستخدم: [{squad_txt}].
+                    قائمة بدلاء مقترحة لموسم 2026/2027: [{live_targets}].
                     
-                    قدم توصيتين محددتين للتبديل للجولة القادمة:
-                    1. التبديل الأول (الأولوية القصوى): اسم اللاعب المغادر، اسم اللاعب البديل، ومبرر الأهداف والتمريرات المتوقعة.
+                    قدم توصيتين محددتين للتبديل للجولة القادمة بالعربية الفصحى المباشرة:
+                    1. التبديل الأول (الأولوية القصوى): اسم المغادر والبديل ونظرة تكتيكية.
                     2. التبديل الثاني (اختياري/تفاضلي): اسم المغادر والبديل ونسبة المخاطرة.
                     """
                     st.session_state["cached_transfers"] = ask_gemini(
@@ -388,7 +365,7 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
         st.warning("⚠️ يرجى إدخال رقم FPL Team ID في القائمة الجانبية.")
     else:
         if st.button("🚀 جلب وتحليل التشكيلة بـ ID"):
-            with st.spinner("جاري تحليل التشكيلة..."):
+            with st.spinner("جاري جلب التشكيلة والتحليل..."):
                 squad, err = fetch_manager_squad(secrets_fpl_id)
                 if err:
                     st.error(err)
@@ -397,7 +374,7 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
                     squad_txt = ", ".join([
                         f"{p['name']} ({p['team']})" for p in squad
                     ])
-                    ai_prompt = f"حلل تشكيلة الفانتسي التالية وقدم أفضل نصيحة تبديل واختيار كابتن للجولة القادمة: {squad_txt}"
+                    ai_prompt = f"حلل تشكيلة الفانتسي وقدم أفضل نصيحة تبديل واختيار كابتن للجولة القادمة: {squad_txt}"
                     st.session_state["cached_analysis"] = ask_gemini(
                         ai_prompt, extra_context=expert_tweets
                     )
@@ -442,7 +419,7 @@ elif category == "📊 تحليل التشكيلة والتقرير اليومي
             st.write(st.session_state.get("cached_analysis", ""))
 
 # ---------------------------------------------------------
-# باقي الأقسام المسرّعة
+# باقي الأقسام
 # ---------------------------------------------------------
 elif category == "💬 المساعد الصوتي والدردشة":
     st.header("🗣️ الدردشة والاستفسارات المباشرة")
