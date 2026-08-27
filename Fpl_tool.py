@@ -13,6 +13,13 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+}
+
 st.markdown(
     """
 <style>
@@ -94,8 +101,10 @@ div.stButton > button:hover {
 # ---------------------------------------------------------
 def get_json(url):
   try:
-    res = requests.get(url, timeout=5)
-    return res.json() if res.status_code == 200 else None
+    res = requests.get(url, headers=HEADERS, timeout=10)
+    if res.status_code == 200:
+      return res.json()
+    return None
   except Exception:
     return None
 
@@ -106,7 +115,7 @@ def fetch_live_fpl_data():
       "https://fantasy.premierleague.com/api/bootstrap-static/"
   )
   if not static_data:
-    return None, None, None, None, None
+    return {}, {}, {}, {}, None
   players = {p["id"]: p for p in static_data.get("elements", [])}
   teams = {t["id"]: t["name"] for t in static_data.get("teams", [])}
   types = {
@@ -198,33 +207,37 @@ def fetch_manager_info(manager_id):
 
 @st.cache_data(ttl=3600)
 def fetch_manager_squad(manager_id):
-  players, teams, types, _, _ = fetch_live_fpl_data()
+  players, teams, types, static_data, _ = fetch_live_fpl_data()
   if not players:
-    return None, "تعذر جلب بيانات الفانتسي العامة حالياً."
+    return None, "تعذر جلب بيانات الفانتسي العامة حالياً من سيرفر FPL."
   entry_data = fetch_manager_info(manager_id)
   if not entry_data:
     return None, "رقم الفريق غير صحيح أو يتعذر الوصول له."
 
-  current_gw = (
-      entry_data.get("current_event")
-      or entry_data.get("started_event")
-      or 1
-  )
-  if not current_gw:
-    current_gw = 1
+  events = static_data.get("events", []) if static_data else []
+  current_gw = 1
+  for ev in events:
+    if ev.get("is_current"):
+      current_gw = ev.get("id")
+      break
+    elif ev.get("is_next"):
+      current_gw = max(1, ev.get("id") - 1)
+      break
 
   picks_data = get_json(
       f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{current_gw}/picks/"
   )
-  if not picks_data or "picks" not in picks_data:
-    if current_gw > 1:
-      current_gw -= 1
-      picks_data = get_json(
-          f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{current_gw}/picks/"
-      )
 
   if not picks_data or "picks" not in picks_data:
-    return None, "تعذر جلب تشكيلة الجولة الحالية (تأكد من صحة رقم الفريق)."
+    for gw in range(current_gw, 0, -1):
+      picks_data = get_json(
+          f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{gw}/picks/"
+      )
+      if picks_data and "picks" in picks_data:
+        break
+
+  if not picks_data or "picks" not in picks_data:
+    return None, "تعذر جلب تشكيلة الفريق. تأكد من صحة رقم FPL Team ID."
 
   squad = []
   for pick in picks_data.get("picks", []):
@@ -233,9 +246,7 @@ def fetch_manager_squad(manager_id):
     status = p_info.get("status", "a")
     squad.append({
         "name": p_info.get("web_name", "لاعب"),
-        "team": teams.get(
-            p_info.get("team"), "الدوري الإنجليزي"
-        ),  # تم التصحيح هنا لاستخدام p_info بدلاً من p
+        "team": teams.get(p_info.get("team"), "الدوري الإنجليزي"),
         "pos": types.get(p_info.get("element_type"), "MID"),
         "is_captain": pick.get("is_captain", False),
         "is_vice": pick.get("is_vice_captain", False),
@@ -252,24 +263,23 @@ def fetch_manager_squad(manager_id):
 # 3. عقل الذكاء الاصطناعي
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
-أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 26/27 لموسم 2026/2027.
-قواعد صارمة جداً ومقدسة:
-1. حظر تام للهلوسة في أندية اللاعبين: التزم التزاماً مطلقاً بأسماء الأندية الحقيقية القادمة من السيرفر الرسمي والمرفقة مع اسم كل لاعب. لا تغير أندية اللاعبين بناءً على ذاكرتك القديمة أبداً.
-2. اعتمد حصرياً على تشكيلة المستخدم الفعلية وقائمة لاعبي الدوري الإنجليزي الممتاز (Premier League) الحقيقيين فقط.
-3. قدم تحليلاتك وتبديلاتك واختيارات الكابتن مبنية 100% على البيانات الرسمية وسجل المباريات (FDR) والعوائد المتوقعة (xGI).
+أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL لموسم الدوري الإنجليزي الممتاز.
+قواعد صارمة جداً:
+1. التزم حصرياً بالأندية والبيانات الحقيقية للاعبي الدوري الإنجليزي الممتاز القادمة من السيرفر الرسمي.
+2. اعتمد حصرياً على تشكيلة المستخدم الفعلية الممررة إليك.
 """
 
 
 def ask_openai(prompt_text, squad_context=""):
   secrets_openai = os.environ.get("OPENAI_API_KEY", "")
   if not secrets_openai:
-    return "⚠️ تنبيه: يرجى إضافة مفتاح OPENAI_API_KEY في متغيرات البيئة على Railway."
+    return "⚠️ تنبيه: يرجى إضافة مفتاح OPENAI_API_KEY في متغيرات البيئة."
   try:
     client = OpenAI(api_key=secrets_openai)
     full_query = prompt_text
     if squad_context:
       full_query = (
-          f"تشكيلة المستخدم الفعلية والحالية (مع أنديتها الرسمية من السيرفر):\n"
+          f"تشكيلة المستخدم الفعلية الحالية (مع أنديتها الرسمية):\n"
           f"[{squad_context}]\n\nطلب المستخدم:\n{prompt_text}"
       )
 
@@ -292,7 +302,7 @@ def ask_openai(prompt_text, squad_context=""):
 # ---------------------------------------------------------
 st.markdown(
     "<h1 style='text-align: center; color: #00ff87; margin-bottom: 0;'>⚽ BMS"
-    " bot FPL 26/27</h1>",
+    " bot FPL</h1>",
     unsafe_allow_html=True,
 )
 st.markdown(
@@ -360,7 +370,7 @@ with tab1:
   else:
     entry_data = fetch_manager_info(user_fpl_id)
     if not entry_data:
-      st.error("تعذر جلب بيانات الفريق.")
+      st.error("تعذر جلب بيانات الفريق من سيرفر FPL.")
     else:
       pts = entry_data.get("summary_overall_points", 0)
       rank = entry_data.get("summary_overall_rank", 0)
@@ -453,7 +463,10 @@ with tab2:
         st.markdown("---")
         st.markdown(st.session_state["cached_squad_analysis"])
     else:
-      st.info("💡 أدخل رقم فريقك واضغط على زر عرض وتحليل التشكيلة.")
+      st.info(
+          "💡 أدخل رقم فريقك واضغط على زر عرض وتحليل التشكيلة لجلب بياناتك"
+          " الحية."
+      )
 
 with tab3:
   st.subheader("🔄 تحليل التبديلات الذكية")
@@ -463,8 +476,7 @@ with tab3:
     else:
       res = ask_openai(
           "بناءً على تشكيلتي الحالية وأندية اللاعبين الحقيقية وجداول المباريات،"
-          " اقترح تبديلين دقيقين (في نفس المركز) للتحسين دون اقتراح لاعب موجود لدي"
-          " أصلاً.",
+          " اقترح تبديلين دقيقين للتحسين.",
           squad_context=current_squad_text,
       )
       st.markdown(res)
@@ -476,7 +488,7 @@ with tab4:
       st.error("تعذر جلب التشكيلة الحية للفريق.")
     else:
       res = ask_openai(
-          "من هم أفضل 3 مرشحين لشارة الكابتن للجولة القادمة من بين لاعبي فريقي"
+          "من هم أفضل مرشحين لشارة الكابتن للجولة القادمة من بين لاعبي فريقي"
           " الحاليين مع ذكر أنديتهم الحقيقية؟",
           squad_context=current_squad_text,
       )
@@ -539,8 +551,7 @@ with tab9:
   player_name = st.text_input("أدخل اسم اللاعب لفحص خطورة عدم امتلاكه:")
   if player_name:
     ans = ask_openai(
-        f"ما هي المخاطر والتأثيرات الناتجة عن عدم امتلاك اللاعب {player_name}"
-        f" بين النخبة والترتيب العام؟",
+        f"ماهي المخاطر الناتجة عن عدم امتلاك اللاعب {player_name}؟",
         squad_context=current_squad_text,
     )
     st.markdown(ans)
