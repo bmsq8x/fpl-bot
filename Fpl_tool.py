@@ -203,15 +203,16 @@ def fetch_manager_squad(manager_id):
         "selected_by": p_info.get("selected_by_percent", "0.0"),
         "status": status,
         "total_points": p_info.get("total_points", 0),
+        "form": float(p_info.get("form", "0.0") or 0.0),
         "news": p_info.get("news", ""),
     })
   return squad, None
 
 
 # ---------------------------------------------------------
-# خوارزمية بايثون الرياضية الصارمة للتبديلات (منع هلوسة الأندية)
+# نظام التحسين الرياضي المتقدم (Mathematical Optimization Model)
 # ---------------------------------------------------------
-def generate_algorithmic_transfers(squad_objects):
+def calculate_mathematical_optimal_transfers(squad_objects):
   players, teams, _, _, _ = fetch_live_fpl_data()
   if not players or not squad_objects:
     return []
@@ -219,11 +220,22 @@ def generate_algorithmic_transfers(squad_objects):
   owned_ids = {p["id"] for p in squad_objects}
   suggestions = []
 
+  # حساب نقاط الكفاءة الرياضية (Performance Score = Points + (Form * 5))
   non_owned = [p for p in players.values() if p["id"] not in owned_ids]
+  for p in non_owned:
+    pts = int(p.get("total_points", 0) or 0)
+    form = float(p.get("form", "0.0") or 0.0)
+    p["math_score"] = pts + (form * 10)
+
   non_owned_sorted = sorted(
-      non_owned, key=lambda x: int(x.get("total_points", 0) or 0), reverse=True
+      non_owned, key=lambda x: x["math_score"], reverse=True
   )
-  squad_sorted = sorted(squad_objects, key=lambda x: x["total_points"])
+
+  # تقييم لاعبي التشكيلة الحالية لتحديد الأضعف رياضياً
+  for p in squad_objects:
+    p["math_score"] = p["total_points"] + (p["form"] * 10)
+
+  squad_sorted = sorted(squad_objects, key=lambda x: x["math_score"])
 
   for i in range(min(2, len(squad_sorted))):
     sell_player = squad_sorted[i]
@@ -231,13 +243,15 @@ def generate_algorithmic_transfers(squad_objects):
         p
         for p in non_owned_sorted
         if p.get("element_type") == sell_player["element_type"]
+        and round(p.get("now_cost", 0) / 10.0, 1)
+        <= sell_player["price"] + 1.5  # مراعاة الميزانية المتاحة
     ]
     if matching_replacements:
       buy_p = matching_replacements[0]
       buy_name = buy_p.get("web_name")
       buy_team = teams.get(buy_p.get("team"), "الدوري الإنجليزي")
       buy_price = round(buy_p.get("now_cost", 0) / 10.0, 1)
-      buy_pts = buy_p.get("total_points", 0)
+      buy_score = round(buy_p.get("math_score", 0), 1)
 
       suggestions.append({
           "out_name": sell_player["name"],
@@ -246,7 +260,7 @@ def generate_algorithmic_transfers(squad_objects):
           "in_name": buy_name,
           "in_team": buy_team,
           "in_price": buy_price,
-          "in_pts": buy_pts,
+          "score": buy_score,
       })
   return suggestions
 
@@ -312,19 +326,17 @@ def fetch_injured_players_from_api():
 
 
 # ---------------------------------------------------------
-# الذكاء الاصطناعي مع القواعد المقيدة
+# الذكاء الاصطناعي للاستشارات فقط
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
-أنت مستشار فانتسي محترف. التزم حصرياً بالبيانات الحقيقية الممررة لك من السيرفر الرسمي ولا تبتدع أندية وهمية.
+أنت مستشار فانتسي محترف. التزم حصرياً بالبيانات الحقيقية الممررة لك من السيرفر الرسمي.
 """
 
 
 def ask_openai(prompt_text, squad_context=""):
   api_key = os.environ.get("OPENAI_API_KEY", "")
   if not api_key:
-    return (
-        "⚠️ تنبيه: يرجى إضافة مفتاح OPENAI_API_KEY في متغيرات البيئة على Railway."
-    )
+    return "⚠️ تنبيه: يرجى إضافة مفتاح OPENAI_API_KEY في متغيرات البيئة."
   try:
     client = OpenAI(api_key=api_key)
     query = (
@@ -355,7 +367,7 @@ st.markdown(
 )
 st.markdown(
     "<p style='text-align: center; color: #b1c1d8; font-size: 15px; margin-top:"
-    " 5px;'>المنصة الذكية لإدارة وفحص فريق الفانتسي من السيرفر الرسمي</p>",
+    " 5px;'>المنصة الذكية لإدارة وفحص فريق الفانتسي بالتحسين الرياضي</p>",
     unsafe_allow_html=True,
 )
 
@@ -391,8 +403,8 @@ if user_fpl_id:
   squad_objects, squad_err = fetch_manager_squad(user_fpl_id)
   if squad_objects:
     current_squad_text = ", ".join([
-        f"{p['name']} ({p['pos']} - النادي: {p['team']} - £{p['price']}M - نقاط:"
-        f" {p['total_points']})"
+        f"{p['name']} ({p['pos']} - النادي: {p['team']} - £{p['price']}M - مؤشر"
+        f" الأداء: {p['math_score']})"
         for p in squad_objects
     ])
 
@@ -461,7 +473,7 @@ with tab2:
             bc = "badge-green" if p["status"] == "a" else "badge-red"
             st.markdown(
                 f'<div class="player-card {bc}">{p["name"]}{cap}<span>{p["team"]}</span><div'
-                f' class="price">£{p["price"]}M</div></div>',
+                f' class="price">£{p["price']}M</div></div>',
                 unsafe_allow_html=True,
             )
           st.markdown("</div>", unsafe_allow_html=True)
@@ -472,28 +484,30 @@ with tab2:
       )
 
 with tab3:
-  st.subheader("🔄 تحليل التبديلات الذكية (خوارزمية بايثون الدقيقة)")
+  st.subheader(
+      "🔄 تحليل التبديلات الذكية (نظام التحسين الرياضي متعدد المعايير)"
+  )
   if not user_fpl_id:
     st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى لعرض التبديلات.")
   else:
     if squad_err:
       st.error(squad_err)
     elif squad_objects:
-      transfers = generate_algorithmic_transfers(squad_objects)
+      transfers = calculate_mathematical_optimal_transfers(squad_objects)
       if transfers:
         for idx, t in enumerate(transfers, 1):
           st.markdown(
               f"""
                     <div class="transfer-box">
-                        <h4>مقترح تبديل #{idx}</h4>
+                        <h4>مقترح التحسين الرياضي #{idx}</h4>
                         <p>❌ <b>بيع (OUT):</b> {t['out_name']} ({t['out_team']} - £{t['out_price']}M)</p>
-                        <p>🟢 <b>شراء (IN):</b> {t['in_name']} ({t['in_team']} - £{t['in_price']}M) - النقاط الكلية: {t['in_pts']}</p>
+                        <p>🟢 <b>شراء (IN):</b> {t['in_name']} ({t['in_team']} - £{t['in_price']}M) - مؤشر الأداء الرياضي: {t['score']}</p>
                     </div>
                     """,
               unsafe_allow_html=True,
           )
       else:
-        st.info("لا توجد مقترحات تبديل متاحة.")
+        st.info("لا توجد مقترحات تبديل مطابقة لمعايير التحسين حالياً.")
 
 with tab4:
   st.subheader("👑 مستشار الكابتن الذكي")
