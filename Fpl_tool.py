@@ -190,6 +190,10 @@ def fetch_manager_squad(manager_id):
     p_name = p_info.get("web_name", "لاعب")
     team_name = teams.get(p_info.get("team"), "الدوري الإنجليزي")
 
+    total_pts = int(p_info.get("total_points", 0) or 0)
+    form_val = float(p_info.get("form", "0.0") or 0.0)
+    math_score_val = total_pts + (form_val * 10)
+
     squad.append({
         "id": pick["element"],
         "name": p_name,
@@ -202,8 +206,9 @@ def fetch_manager_squad(manager_id):
         "price": exact_price,
         "selected_by": p_info.get("selected_by_percent", "0.0"),
         "status": status,
-        "total_points": p_info.get("total_points", 0),
-        "form": float(p_info.get("form", "0.0") or 0.0),
+        "total_points": total_pts,
+        "form": form_val,
+        "math_score": math_score_val,
         "news": p_info.get("news", ""),
     })
   return squad, None
@@ -229,9 +234,6 @@ def calculate_mathematical_optimal_transfers(squad_objects):
   non_owned_sorted = sorted(
       non_owned, key=lambda x: x["math_score"], reverse=True
   )
-
-  for p in squad_objects:
-    p["math_score"] = p["total_points"] + (p["form"] * 10)
 
   squad_sorted = sorted(squad_objects, key=lambda x: x["math_score"])
 
@@ -266,7 +268,7 @@ def calculate_mathematical_optimal_transfers(squad_objects):
 def fetch_price_changes_radar():
   players, teams, _, _, _ = fetch_live_fpl_data()
   if not players:
-    return [], []
+    return [], [], {}
   rising = sorted(
       players.values(),
       key=lambda x: int(x.get("cost_change_event", 0) or 0),
