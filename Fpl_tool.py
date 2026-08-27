@@ -304,7 +304,7 @@ st.markdown(
 
 col_top1, col_top2 = st.columns([1, 1])
 with col_top1:
-  user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="3427112")
+  user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="")
 
 with col_top2:
   _, _, _, _, deadline_str = fetch_live_fpl_data()
