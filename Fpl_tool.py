@@ -97,16 +97,16 @@ div.stButton > button:hover {
 
 
 # ---------------------------------------------------------
-# 2. وظائف جلب البيانات الحية الآمنة
+# 2. وظائف جلب البيانات الآمنة (مُحصّنة ضد الانهيار)
 # ---------------------------------------------------------
 def get_json(url):
   try:
     res = requests.get(url, headers=HEADERS, timeout=10)
     if res.status_code == 200:
       return res.json()
-    return None
+    return {}
   except Exception:
-    return None
+    return {}
 
 
 @st.cache_data(ttl=3600)
@@ -114,8 +114,9 @@ def fetch_live_fpl_data():
   static_data = get_json(
       "https://fantasy.premierleague.com/api/bootstrap-static/"
   )
-  if not static_data:
+  if not static_data or "elements" not in static_data:
     return {}, {}, {}, {}, None
+
   players = {p["id"]: p for p in static_data.get("elements", [])}
   teams = {t["id"]: t["name"] for t in static_data.get("teams", [])}
   types = {
@@ -165,7 +166,7 @@ def fetch_differential_finders():
       if 0.5 < sel < 8.0 and pts > 10:
         differentials.append({
             "name": p.get("web_name"),
-            "team": teams.get(p.get("team")),
+            "team": teams.get(p.get("team"), "غير معروف"),
             "sel": sel,
             "pts": pts,
             "price": round(p.get("now_cost", 0) / 10.0, 1),
@@ -202,7 +203,8 @@ def fetch_injured_players_from_api():
 
 @st.cache_data(ttl=3600)
 def fetch_manager_info(manager_id):
-  return get_json(f"https://fantasy.premierleague.com/api/entry/{manager_id}/")
+  data = get_json(f"https://fantasy.premierleague.com/api/entry/{manager_id}/")
+  return data if data and "id" in data else None
 
 
 @st.cache_data(ttl=3600)
