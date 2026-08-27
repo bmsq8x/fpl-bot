@@ -90,7 +90,7 @@ div.stButton > button:hover {
 
 
 # ---------------------------------------------------------
-# 2. وظائف جلب البيانات الحية من سيرفر FPL الرسمي
+# 2. وظائف جلب البيانات الحية الآمنة
 # ---------------------------------------------------------
 def get_json(url):
   try:
@@ -107,10 +107,11 @@ def fetch_live_fpl_data():
   )
   if not static_data:
     return None, None, None, None, None
-  players = {p["id"]: p for p in static_data["elements"]}
-  teams = {t["id"]: t["name"] for t in static_data["teams"]}
+  players = {p["id"]: p for p in static_data.get("elements", [])}
+  teams = {t["id"]: t["name"] for t in static_data.get("teams", [])}
   types = {
-      et["id"]: et["singular_name_short"] for et in static_data["element_types"]
+      et["id"]: et["singular_name_short"]
+      for et in static_data.get("element_types", [])
   }
 
   events = static_data.get("events", [])
@@ -131,11 +132,12 @@ def fetch_price_changes_radar():
     return [], []
   rising = sorted(
       players.values(),
-      key=lambda x: int(x.get("cost_change_event", 0)),
+      key=lambda x: int(x.get("cost_change_event", 0) or 0),
       reverse=True,
   )[:5]
   falling = sorted(
-      players.values(), key=lambda x: int(x.get("cost_change_event", 0))
+      players.values(),
+      key=lambda x: int(x.get("cost_change_event", 0) or 0),
   )[:5]
   return rising, falling
 
@@ -150,7 +152,7 @@ def fetch_differential_finders():
   for p in players.values():
     try:
       sel = float(p.get("selected_by_percent", "0") or 0)
-      pts = int(p.get("total_points", 0))
+      pts = int(p.get("total_points", 0) or 0)
       if 0.5 < sel < 8.0 and pts > 10:
         differentials.append({
             "name": p.get("web_name"),
@@ -202,12 +204,29 @@ def fetch_manager_squad(manager_id):
   entry_data = fetch_manager_info(manager_id)
   if not entry_data:
     return None, "رقم الفريق غير صحيح أو يتعذر الوصول له."
-  current_gw = entry_data.get("current_event", 1)
+
+  # الحصول على الجولة الحالية أو القادمة بشكل آمن
+  current_gw = (
+      entry_data.get("current_event")
+      or entry_data.get("started_event")
+      or 1
+  )
+  if not current_gw:
+    current_gw = 1
+
   picks_data = get_json(
       f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{current_gw}/picks/"
   )
-  if not picks_data:
-    return None, "تعذر جلب تشكيلة الجولة الحالية."
+  if not picks_data or "picks" not in picks_data:
+    # محاولة الجولة السابقة إن لم تتوفر الحالية
+    if current_gw > 1:
+      current_gw -= 1
+      picks_data = get_json(
+          f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{current_gw}/picks/"
+      )
+
+  if not picks_data or "picks" not in picks_data:
+    return None, "تعذر جلب تشكيلة الجولة الحالية (تأكد من صحة رقم الفريق)."
 
   squad = []
   for pick in picks_data.get("picks", []):
@@ -230,13 +249,13 @@ def fetch_manager_squad(manager_id):
 
 
 # ---------------------------------------------------------
-# 3. عقل الذكاء الاصطناعي مع فرض قراءة تشكيلة المستخدم بدقة
+# 3. عقل الذكاء الاصطناعي
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
 أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 26/27 لموسم 2026/2027.
 قواعد صارمة جداً:
 1. اعتمد حصرياً على تشكيلة المستخدم الفعلية التي يتم تمريرها في كل طلب. لا تفترض وجود لاعبين وهميين، ولا تقترح استبدال لاعب هو أصلاً موجود في تشكيلة المستخدم الحالية!
-2. التزم بأندية الدوري الإنجليزي الممتاز الحقيقية فقط (مثل محمد صلاح في ليفربول، ولا تقترح أي أندية خارج البريميرليغ مثل الدوري التركي أو الألماني).
+2. التزم بأندية الدوري الإنجليزي الممتاز الحقيقية فقط.
 3. قدم تحليلاتك وتبديلاتك واختيارات الكابتن مبنية 100% على تشكيلة المستخدم الحالية وجدول المباريات الرسمي (FDR) والعوائد المتوقعة (xGI).
 """
 
@@ -269,7 +288,7 @@ def ask_openai(prompt_text, squad_context=""):
 
 
 # ---------------------------------------------------------
-# 4. واجهة العرض الرئيسية المرتبة
+# 4. واجهة العرض الرئيسية
 # ---------------------------------------------------------
 st.markdown(
     "<h1 style='text-align: center; color: #00ff87; margin-bottom: 0;'>⚽ BMS"
@@ -311,7 +330,7 @@ with col_top2:
 
 st.markdown("---")
 
-# جلب تشكيلة المستخدم تلقائياً لتكون متاحة لكل الأقسام
+# جلب التشكيلة بأمان تام مع حماية من الأخطاء
 current_squad_text = ""
 squad_objects, squad_err = fetch_manager_squad(user_fpl_id)
 if squad_objects:
@@ -342,7 +361,9 @@ with tab1:
   else:
     entry_data = fetch_manager_info(user_fpl_id)
     if not entry_data:
-      st.error("تعذر جلب بيانات الفريق.")
+      st.error(
+          "تعذر جلب بيانات الفريق. تأكد من صحة رقم FPL ID أو أن السيرفر يعمل."
+      )
     else:
       pts = entry_data.get("summary_overall_points", 0)
       rank = entry_data.get("summary_overall_rank", 0)
@@ -434,6 +455,10 @@ with tab2:
       if "cached_squad_analysis" in st.session_state:
         st.markdown("---")
         st.markdown(st.session_state["cached_squad_analysis"])
+    else:
+      st.info(
+          "💡 يرجى إدخال رقم فريق صحيح والنقر على زر عرض وتحليل التشكيلة لعرضها."
+      )
 
 with tab3:
   st.subheader(
