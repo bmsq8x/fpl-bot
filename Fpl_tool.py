@@ -20,18 +20,6 @@ HEADERS = {
     )
 }
 
-# طبقة التحقق والتقاطع البرمجية لضمان دقة الأندية (مطابقة لمعايير FPL Tables[cite: 1])
-VERIFIED_TEAM_MAPPING = {
-    "Nketiah": "Crystal Palace",
-    "Estupiñán": "Milan",
-    "McNeil": "Everton",
-}
-
-
-def get_verified_team(player_name, server_team_name):
-  return VERIFIED_TEAM_MAPPING.get(player_name, server_team_name)
-
-
 st.markdown(
     """
 <style>
@@ -102,6 +90,14 @@ div.stButton > button:hover {
     box-shadow: 0 4px 15px rgba(255, 75, 75, 0.4);
     margin-bottom: 15px;
 }
+
+.transfer-box {
+    background: rgba(36, 0, 56, 0.8);
+    border: 1px solid #00ff87;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -109,7 +105,7 @@ div.stButton > button:hover {
 
 
 # ---------------------------------------------------------
-# 2. جلب البيانات من سيرفر FPL الرسمي
+# 2. وظائف جلب البيانات الحية من السيرفر الرسمي
 # ---------------------------------------------------------
 def get_json(url):
   try:
@@ -175,8 +171,7 @@ def fetch_differential_finders():
       sel = float(p.get("selected_by_percent", "0") or 0)
       pts = int(p.get("total_points", 0) or 0)
       name = p.get("web_name")
-      raw_team = teams.get(p.get("team"), "غير معروف")
-      team_name = get_verified_team(name, raw_team)
+      team_name = teams.get(p.get("team"), "غير معروف")
       if 0.5 < sel < 8.0 and pts > 10:
         differentials.append({
             "name": name,
@@ -204,8 +199,7 @@ def fetch_injured_players_from_api():
     status = p.get("status", "a")
     news = p.get("news", "")
     name = p.get("web_name", "لاعب")
-    raw_team = teams.get(p.get("team"), "الدوري الإنجليزي")
-    team_name = get_verified_team(name, raw_team)
+    team_name = teams.get(p.get("team"), "الدوري الإنجليزي")
     if status != "a":
       injured_list.append({
           "اللاعب": name,
@@ -264,33 +258,77 @@ def fetch_manager_squad(manager_id):
     exact_price = round(p_info.get("now_cost", 0) / 10.0, 1)
     status = p_info.get("status", "a")
     p_name = p_info.get("web_name", "لاعب")
-    raw_team = teams.get(p_info.get("team"), "الدوري الإنجليزي")
-    team_name = get_verified_team(p_name, raw_team)
+    team_name = teams.get(p_info.get("team"), "الدوري الإنجليزي")
 
     squad.append({
+        "id": pick["element"],
         "name": p_name,
         "team": team_name,
         "pos": types.get(p_info.get("element_type"), "MID"),
+        "element_type": p_info.get("element_type"),
         "is_captain": pick.get("is_captain", False),
         "is_vice": pick.get("is_vice_captain", False),
         "position": pick.get("position", 1),
         "price": exact_price,
         "selected_by": p_info.get("selected_by_percent", "0.0"),
         "status": status,
+        "total_points": p_info.get("total_points", 0),
         "news": p_info.get("news", ""),
     })
   return squad, None
 
 
+# خوارزمية بايثون البحتة للتبديلات (تمنع هلوسة الأندية 100%)
+def generate_algorithmic_transfers(squad_objects):
+  players, teams, types, _, _ = fetch_live_fpl_data()
+  if not players or not squad_objects:
+    return []
+
+  owned_ids = {p["id"] for p in squad_objects}
+  suggestions = []
+
+  # البحث عن أفضل اللاعبين المتاحين في السوق غير المملوكين للمستخدم بناءً على النقاط
+  non_owned = [p for p in players.values() if p["id"] not in owned_ids]
+  non_owned_sorted = sorted(
+      non_owned, key=lambda x: int(x.get("total_points", 0) or 0), reverse=True
+  )
+
+  # اختيار لاعبين من تشكيلة المستخدم يكونون مصابين أو نقاطهم قليلة للبيع
+  squad_sorted = sorted(squad_objects, key=lambda x: x["total_points"])
+
+  for i in range(min(2, len(squad_sorted))):
+    sell_player = squad_sorted[i]
+    # إيجاد بديل في نفس المركز
+    matching_replacements = [
+        p
+        for p in non_owned_sorted
+        if p.get("element_type") == sell_player["element_type"]
+    ]
+    if matching_replacements:
+      buy_p = matching_replacements[0]
+      buy_name = buy_p.get("web_name")
+      buy_team = teams.get(buy_p.get("team"), "الدوري الإنجليزي")
+      buy_price = round(buy_p.get("now_cost", 0) / 10.0, 1)
+      buy_pts = buy_p.get("total_points", 0)
+
+      suggestions.append({
+          "out_name": sell_player["name"],
+          "out_team": sell_player["team"],
+          "out_price": sell_player["price"],
+          "in_name": buy_name,
+          "in_team": buy_team,
+          "in_price": buy_price,
+          "in_pts": buy_pts,
+      })
+  return suggestions
+
+
 # ---------------------------------------------------------
-# 3. عقل الذكاء الاصطناعي
+# 3. عقل الذكاء الاصطناعي للأقسام الأخرى
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
-أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 2026/2027.
-قواعد صارمة ومقدسة تطبق على كافة الأقسام والاستفسارات دون استثناء:
-1. الالتزام المطلق ببيانات السيرفر الرسمي FPL الممررة لك (أسماء اللاعبين، الأندية الرسمية الموثوقة، الأسعار، نسب الملكية). يُمنع منعاً باتاً استخدام أي معلومات أو أندية قديمة من الذاكرة الداخلية.
-2. الاعتماد حصرياً على تشكيلة المستخدم الفعلية الحالية في جميع أقسام التحليل والتبديل والكابتن والدردشة.
-3. عند اقتراح التبديلات أو الكابتن أو تحليل الفريق، يجب التمييز بدقة بين لاعبي التشكيلة الحالية والخارجية، وممنوع اقتراح استبدال لاعب هو أصلاً موجود ضمن تشكيلة المستخدم.
+أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL.
+التزم التزاما مطلقاً بالبيانات الحقيقية القادمة من السيرفر الرسمي FPL الممررة لك.
 """
 
 
@@ -303,8 +341,8 @@ def ask_openai(prompt_text, squad_context=""):
     full_query = prompt_text
     if squad_context:
       full_query = (
-          f"بيانات تشكيلة المستخدم الحالية (من سيرفر FPL الرسمي والمدققة):\n"
-          f"[{squad_context}]\n\nطلب المستخدم:\n{prompt_text}"
+          f"بيانات تشكيلة المستخدم الحالية:\n[{squad_context}]\n\nطلب:"
+          f" المستخدم:\n{prompt_text}"
       )
 
     response = client.chat.completions.create(
@@ -332,13 +370,16 @@ st.markdown(
 st.markdown(
     "<p style='text-align: center; color: #b1c1d8; font-size: 15px; margin-top:"
     " 5px;'>المنصة الذكية المتقدمة لإدارة وفحص فريق الفانتسي بناءً على تشكيلتك"
-    " الحية من السيرفر الرسمي</p>",
+    " الحية</p>",
     unsafe_allow_html=True,
 )
 
 col_top1, col_top2 = st.columns([1, 1])
 with col_top1:
-  user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="3427112")
+  # خانة فارغة مع مثال توضيحي لعدم حفظ أي رقم شخصي في الكود
+  user_fpl_id = st.text_input(
+      "⚽ أدخل معرف فريقك (FPL Team ID):", value="", placeholder="مثال: 123456"
+  )
 
 with col_top2:
   _, _, _, _, deadline_str = fetch_live_fpl_data()
@@ -365,12 +406,15 @@ with col_top2:
 st.markdown("---")
 
 current_squad_text = ""
-squad_objects, squad_err = fetch_manager_squad(user_fpl_id)
-if squad_objects:
-  current_squad_text = ", ".join([
-      f"{p['name']} ({p['pos']} - النادي: {p['team']} - £{p['price']}M - ملكية: {p['selected_by']}% - حالة: {p['status']})"
-      for p in squad_objects
-  ])
+squad_objects, squad_err = None, None
+if user_fpl_id:
+  squad_objects, squad_err = fetch_manager_squad(user_fpl_id)
+  if squad_objects:
+    current_squad_text = ", ".join([
+        f"{p['name']} ({p['pos']} - نادي: {p['team']} - £{p['price']}M - النقاط:"
+        f" {p['total_points']})"
+        for p in squad_objects
+    ])
 
 # ---------------------------------------------------------
 # 5. التبويبات المتكاملة
@@ -390,11 +434,13 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
 with tab1:
   st.subheader("🏠 لوحة التحكم الشخصية والدوريات الخاصة")
   if not user_fpl_id:
-    st.warning("⚠️ يرجى إدخال رقم FPL Team ID الخاص بك في الأعلى.")
+    st.warning(
+        "⚠️ يرجى إدخال رقم FPL Team ID الخاص بك في الأعلى (مثال: 123456)."
+    )
   else:
     entry_data = fetch_manager_info(user_fpl_id)
     if not entry_data:
-      st.error("تعذر جلب بيانات الفريق من سيرفر FPL.")
+      st.error("تعذر جلب بيانات الفريق. تأكد من صحة رقم ID.")
     else:
       pts = entry_data.get("summary_overall_points", 0)
       rank = entry_data.get("summary_overall_rank", 0)
@@ -447,8 +493,7 @@ with tab2:
       else:
         st.session_state["squad_data"] = squad_objects
         st.session_state["cached_squad_analysis"] = ask_openai(
-            f"حلل هذه التشكيلة بناءً على بيانات السيرفر الرسمي. ملاحظات إضافية:"
-            f" [{expert_tweets}]",
+            f"حلل هذه التشكيلة استراتيجياً. ملاحظات إضافية: [{expert_tweets}]",
             squad_context=current_squad_text,
         )
 
@@ -482,7 +527,8 @@ with tab2:
       st.write(
           "**دكة البدلاء:** "
           + " | ".join([
-              f"{p['name']} ({p['team']} - £{p['price']}M - {p['selected_by']}%)"
+              f"{p['name']} ({p['team']} - £{p['price']}M - النقاط:"
+              f" {p['total_points']})"
               for p in bench
           ])
       )
@@ -493,17 +539,31 @@ with tab2:
       st.info("💡 أدخل رقم فريقك واضغط على زر عرض وتحليل التشكيلة.")
 
 with tab3:
-  st.subheader("🔄 تحليل التبديلات الذكية")
-  if st.button("🔍 اقترح أفضل التبديلات لتشكيلتك الحية"):
-    if not current_squad_text:
-      st.error("تعذر جلب التشكيلة الحية للفريق.")
-    else:
-      res = ask_openai(
-          "بناءً على تشكيلتي الحالية وأندية السيرفر الرسمي: اقترح تبديلين دقيقين"
-          " (بيع وشراء) للتحسين مع مراعاة الميزانية وأندية اللاعبين الحقيقية.",
-          squad_context=current_squad_text,
-      )
-      st.markdown(res)
+  st.subheader(
+      "🔄 تحليل التبديلات الذكية (محسوب آلياً بالكامل لمنع هلوسة الأندية)"
+  )
+  if not user_fpl_id:
+    st.warning("⚠️ يرجى إدخال رقم FPL Team ID في الأعلى لعرض التبديلات.")
+  else:
+    if st.button("🔍 عرض المقترحات البرمجية للتبديلات"):
+      if squad_err:
+        st.error(squad_err)
+      else:
+        transfers = generate_algorithmic_transfers(squad_objects)
+        if transfers:
+          for idx, t in enumerate(transfers, 1):
+            st.markdown(
+                f"""
+                        <div class="transfer-box">
+                            <h4>التبديل المقترح #{idx}</h4>
+                            <p>❌ <b>بيع (OUT):</b> {t['out_name']} ({t['out_team']} - £{t['out_price']}M)</p>
+                            <p>🟢 <b>شراء (IN):</b> {t['in_name']} ({t['in_team']} - £{t['in_price']}M) - إجمالي النقاط: {t['in_pts']}</p>
+                        </div>
+                        """,
+                unsafe_allow_html=True,
+            )
+        else:
+          st.info("لا توجد مقترحات تبديل متاحة حالياً.")
 
 with tab4:
   st.subheader("👑 خيارات الكابتن الموصى بها")
@@ -513,7 +573,7 @@ with tab4:
     else:
       res = ask_openai(
           "من هم أفضل مرشحين لشارة الكابتن للجولة القادمة من لاعبي فريقي"
-          " الحاليين مستنداً لبيانات السيرفر الرسمي؟",
+          " الحاليين مع ذكر أنديتهم الرسمية؟",
           squad_context=current_squad_text,
       )
       st.markdown(res)
@@ -542,15 +602,13 @@ with tab7:
     st.markdown("#### 🔥 الأقرب لارتفاع السعر")
     for p in rising:
       st.write(
-          f"- **{p['web_name']}** (السعر: £{p['now_cost']/10}M) - تغير حدث:"
-          f" {p.get('cost_change_event', 0)}"
+          f"- **{p['web_name']}** ({teams.get(p.get('team'), '')} - £{p['now_cost']/10}M)"
       )
   with col_r2:
     st.markdown("#### ❄️ الأكثر عرضة لانخفاض السعر")
     for p in falling:
       st.write(
-          f"- **{p['web_name']}** (السعر: £{p['now_cost']/10}M) - تغير حدث:"
-          f" {p.get('cost_change_event', 0)}"
+          f"- **{p['web_name']}** ({teams.get(p.get('team'), '')} - £{p['now_cost']/10}M)"
       )
 
 with tab8:
