@@ -97,7 +97,7 @@ div.stButton > button:hover {
 
 
 # ---------------------------------------------------------
-# 2. جلب البيانات حصرياً من سيرفر FPL الرسمي
+# 2. جلب البيانات من سيرفر FPL الرسمي
 # ---------------------------------------------------------
 def get_json(url):
   try:
@@ -268,7 +268,7 @@ def fetch_manager_squad(manager_id):
 
 
 # ---------------------------------------------------------
-# 3. عقل الذكاء الاصطناعي مع توحيد القواعد على كافة الأقسام
+# 3. عقل الذكاء الاصطناعي
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
 أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 2026/2027.
@@ -358,7 +358,7 @@ if squad_objects:
   ])
 
 # ---------------------------------------------------------
-# 5. التبويبات المتكاملة مع تطبيق القواعد الموحدة
+# 5. التبويبات المتكاملة
 # ---------------------------------------------------------
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "🏠 لوحة التحكم",
@@ -457,8 +457,8 @@ with tab2:
           status_text = "🟢 جاهز" if p["status"] == "a" else f"🔴 {p['status']}"
           st.markdown(
               f'<div class="player-card {badge_class}">{p["name"]}{cap_tag}'
-              f"<span>{status_text}</span><div"
-              f' class="price">£{p["price']}M</div></div>',
+              f'<span>{status_text}</span>'
+              f'<div class="price">£{p["price"]}M</div></div>',
               unsafe_allow_html=True,
           )
         st.markdown("</div>", unsafe_allow_html=True)
