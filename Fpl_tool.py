@@ -16,7 +16,6 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-/* دعم الاتجاه من اليمين لليسار لكافة عناصر الصفحة لضمان عدم التداخل */
 .stApp { 
     background: linear-gradient(135deg, #090014 0%, #150024 100%) !important; 
     color: #ffffff !important; 
@@ -24,17 +23,9 @@ st.markdown(
     direction: rtl; 
     text-align: right;
 }
-
-/* إخفاء الشريط الجانبي تماماً */
 section[data-testid="stSidebar"] { display: none !important; }
+[data-testid="column"] { direction: rtl; text-align: right; }
 
-/* تنسيق الأعمدة والعناصر لتجنب التداخل */
-[data-testid="column"] {
-    direction: rtl;
-    text-align: right;
-}
-
-/* الأزرار العصرية بنمط التوهج النيون */
 div.stButton > button {
     background: linear-gradient(135deg, #00ff87 0%, #60efff 100%);
     color: #0d0118 !important; font-weight: 800 !important; font-size: 15px !important;
@@ -47,7 +38,6 @@ div.stButton > button:hover {
     box-shadow: 0 6px 25px rgba(96, 239, 255, 0.7); 
 }
 
-/* حقول الإدخال والنصوص الزجاجية */
 .stTextInput input, .stSelectbox select, .stNumberInput input, .stTextArea textarea {
     background-color: rgba(36, 0, 56, 0.6) !important; 
     color: #ffffff !important; 
@@ -56,7 +46,6 @@ div.stButton > button:hover {
     text-align: right;
 }
 
-/* صناديق الإحصائيات الفخمة */
 .metric-box {
     background: linear-gradient(145deg, rgba(36, 0, 56, 0.85), rgba(20, 0, 35, 0.95)); 
     border: 1px solid rgba(0, 255, 135, 0.3); 
@@ -68,7 +57,6 @@ div.stButton > button:hover {
 .metric-box h3 { color: #00ff87; margin: 0; font-size: 26px; font-weight: 700; }
 .metric-box p { color: #b1c1d8; margin: 5px 0 0 0; font-size: 13px; font-weight: 600; }
 
-/* الملعب وتصميم التشكيلة الزجاجي */
 .pitch-container {
     background: linear-gradient(180deg, #165b33 0%, #0d3820 100%);
     border: 2px solid rgba(0, 255, 135, 0.5); 
@@ -88,7 +76,6 @@ div.stButton > button:hover {
 .badge-green { border: 2px solid #00ff87; }
 .badge-red { border: 2px solid #ff4b4b; }
 
-/* شارة الديدلاين */
 .deadline-badge {
     background: linear-gradient(90deg, #ff4b4b, #ff7676);
     color: white; padding: 8px 18px; border-radius: 20px;
@@ -103,7 +90,7 @@ div.stButton > button:hover {
 
 
 # ---------------------------------------------------------
-# 2. وظائف جلب البيانات الحية
+# 2. وظائف جلب البيانات الحية من سيرفر FPL الرسمي
 # ---------------------------------------------------------
 def get_json(url):
   try:
@@ -243,25 +230,35 @@ def fetch_manager_squad(manager_id):
 
 
 # ---------------------------------------------------------
-# 3. عقل الذكاء الاصطناعي
+# 3. عقل الذكاء الاصطناعي مع فرض قراءة تشكيلة المستخدم بدقة
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
 أنت مدير ومنصة الذكاء الاصطناعي الاحترافية BMS bot FPL 26/27 لموسم 2026/2027.
-تقدم استشارات دقيقة ومبنية على إحصائيات الأداء المتوقع xGI وتكتيكات الفرق الـ 20 ومقارنات نخبة المدربين.
+قواعد صارمة جداً:
+1. اعتمد حصرياً على تشكيلة المستخدم الفعلية التي يتم تمريرها في كل طلب. لا تفترض وجود لاعبين وهميين، ولا تقترح استبدال لاعب هو أصلاً موجود في تشكيلة المستخدم الحالية!
+2. التزم بأندية الدوري الإنجليزي الممتاز الحقيقية فقط (مثل محمد صلاح في ليفربول، ولا تقترح أي أندية خارج البريميرليغ مثل الدوري التركي أو الألماني).
+3. قدم تحليلاتك وتبديلاتك واختيارات الكابتن مبنية 100% على تشكيلة المستخدم الحالية وجدول المباريات الرسمي (FDR) والعوائد المتوقعة (xGI).
 """
 
 
-def ask_openai(prompt_text):
+def ask_openai(prompt_text, squad_context=""):
   secrets_openai = os.environ.get("OPENAI_API_KEY", "")
   if not secrets_openai:
     return "⚠️ تنبيه: يرجى إضافة مفتاح OPENAI_API_KEY في متغيرات البيئة على Railway."
   try:
     client = OpenAI(api_key=secrets_openai)
+    full_query = prompt_text
+    if squad_context:
+      full_query = (
+          f"تشكيلة المستخدم الفعلية الحالية هي:\n[{squad_context}]\n\nطلب"
+          f" المستخدم:\n{prompt_text}"
+      )
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt_text},
+            {"role": "user", "content": full_query},
         ],
         temperature=0.1,
         max_tokens=1500,
@@ -281,11 +278,11 @@ st.markdown(
 )
 st.markdown(
     "<p style='text-align: center; color: #b1c1d8; font-size: 15px; margin-top:"
-    " 5px;'>المنصة الذكية المتقدمة لإدارة وفحص فريق الفانتسي في صفحة واحدة</p>",
+    " 5px;'>المنصة الذكية المتقدمة لإدارة وفحص فريق الفانتسي بناءً على تشكيلتك"
+    " الحية</p>",
     unsafe_allow_html=True,
 )
 
-# ترتيب إدخال الفريق والديدلاين في أعمدة منظمة
 col_top1, col_top2 = st.columns([1, 1])
 with col_top1:
   user_fpl_id = st.text_input("⚽ أدخل معرف فريقك (FPL Team ID):", value="3427112")
@@ -313,6 +310,15 @@ with col_top2:
       pass
 
 st.markdown("---")
+
+# جلب تشكيلة المستخدم تلقائياً لتكون متاحة لكل الأقسام
+current_squad_text = ""
+squad_objects, squad_err = fetch_manager_squad(user_fpl_id)
+if squad_objects:
+  current_squad_text = ", ".join([
+      f"{p['name']} ({p['pos']} - {p['team']} - £{p['price']}M - حالة: {p['status']})"
+      for p in squad_objects
+  ])
 
 # ---------------------------------------------------------
 # 5. التبويبات المتكاملة
@@ -384,24 +390,19 @@ with tab2:
     st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى.")
   else:
     if st.button("🚀 عرض وتحليل التشكيلة الحية"):
-      squad, err = fetch_manager_squad(user_fpl_id)
-      if err:
-        st.error(err)
+      if squad_err:
+        st.error(squad_err)
       else:
-        st.session_state["squad_data"] = squad
-        squad_txt = ", ".join([
-            f"{p['name']} ({p['pos']} - £{p['price']}M - حالة: {p['status']})"
-            for p in squad
-        ])
+        st.session_state["squad_data"] = squad_objects
         st.session_state["cached_squad_analysis"] = ask_openai(
-            f"حلل هذه التشكيلة بدقة استراتيجية: [{squad_txt}]."
-            f" ملاحظات إضافية: [{expert_tweets}]"
+            f"حلل هذه التشكيلة بدقة استراتيجية تكتيكية. ملاحظات إضافية:"
+            f" [{expert_tweets}]",
+            squad_context=current_squad_text,
         )
 
-    if "squad_data" in st.session_state:
-      squad = st.session_state["squad_data"]
-      starting_11 = [p for p in squad if p["position"] <= 11]
-      bench = [p for p in squad if p["position"] > 11]
+    if squad_objects:
+      starting_11 = [p for p in squad_objects if p["position"] <= 11]
+      bench = [p for p in squad_objects if p["position"] > 11]
 
       gk = [p for p in starting_11 if p["pos"] == "GKP"]
       defenders = [p for p in starting_11 if p["pos"] == "DEF"]
@@ -428,42 +429,46 @@ with tab2:
 
       st.write(
           "**دكة البدلاء:** "
-          + " | ".join([f"{p['name']} (£{p['price']}M)" for p in bench])
+          + " | ".join([f"{p['name']} ({p['team']} - £{p['price']}M)" for p in bench])
       )
       if "cached_squad_analysis" in st.session_state:
         st.markdown("---")
         st.markdown(st.session_state["cached_squad_analysis"])
 
 with tab3:
-  st.subheader("🔄 تحليل التبديلات الذكية والخيارات المتاحة")
-  if st.button("🔍 اقترح أفضل التبديلات الحالية"):
-    squad, err = fetch_manager_squad(user_fpl_id)
-    if err:
-      st.error(err)
+  st.subheader(
+      "🔄 تحليل التبديلات الذكية بناءً على تشكيلتك الحية وجداول الصعوبة"
+  )
+  if st.button("🔍 اقترح أفضل التبديلات لتشكيلتك الحية"):
+    if not current_squad_text:
+      st.error("تعذر جلب التشكيلة الحية للفريق.")
     else:
-      squad_txt = ", ".join([
-          f"{p['name']} ({p['pos']} - £{p['price']}M)" for p in squad
-      ])
       res = ask_openai(
-          f"اقترح أفضل التبديلات في نفس المركز بناءً على جداول المباريات للأندية"
-          f" الـ 20: [{squad_txt}]"
+          "بناءً على تشكيلتي الحالية وأداء اللاعبين وجداول المباريات، اقترح"
+          " تبديلين دقيقين (في نفس المركز) للتحسين.",
+          squad_context=current_squad_text,
       )
       st.markdown(res)
 
 with tab4:
-  st.subheader("👑 خيارات الكابتن الموصى بها للأسبوع القادم")
-  if st.button("🚀 تقييم واختيار أفضل كابتن"):
-    res = ask_openai(
-        "من هم أفضل 3 مرشحين لشارة الكابتن للجولة القادمة بناءً على الإحصائيات"
-        " المتقدمة xGI وصعوبة مباريات الخصم؟"
-    )
-    st.markdown(res)
+  st.subheader("👑 خيارات الكابتن الموصى بها بناءً على تشكيلتك والخصوم")
+  if st.button("🚀 تقييم واختيار أفضل كابتن من لاعبي فريقي"):
+    if not current_squad_text:
+      st.error("تعذر جلب التشكيلة الحية للفريق.")
+    else:
+      res = ask_openai(
+          "من هم أفضل 3 مرشحين لشارة الكابتن (من بين لاعبي فريقي الحاليين أو كخيار"
+          " متاح) للجولة القادمة بناءً على الإحصائيات المتقدمة xGI وصعوبة مباريات"
+          " الخصم؟",
+          squad_context=current_squad_text,
+      )
+      st.markdown(res)
 
 with tab5:
   st.subheader("💬 الدردشة الفورية مع مستشار فانتسي الذكي")
-  query = st.text_input("اسأل عن أي لاعب، خطة، أو وايلدكارد...")
+  query = st.text_input("اسأل عن أي لاعب في تشكيلتك، خطة، أو وايلدكارد...")
   if query:
-    ans = ask_openai(query)
+    ans = ask_openai(query, squad_context=current_squad_text)
     st.markdown(f"**BMS bot:** {ans}")
 
 with tab6:
@@ -517,6 +522,7 @@ with tab9:
   if player_name:
     ans = ask_openai(
         f"ما هي المخاطر والتأثيرات الناتجة عن عدم امتلاك اللاعب {player_name}"
-        f" بين النخبة والترتيب العام؟"
+        f" بين النخبة والترتيب العام؟",
+        squad_context=current_squad_text,
     )
     st.markdown(ans)
