@@ -220,7 +220,6 @@ def calculate_mathematical_optimal_transfers(squad_objects):
   owned_ids = {p["id"] for p in squad_objects}
   suggestions = []
 
-  # حساب نقاط الكفاءة الرياضية (Performance Score = Points + (Form * 5))
   non_owned = [p for p in players.values() if p["id"] not in owned_ids]
   for p in non_owned:
     pts = int(p.get("total_points", 0) or 0)
@@ -231,7 +230,6 @@ def calculate_mathematical_optimal_transfers(squad_objects):
       non_owned, key=lambda x: x["math_score"], reverse=True
   )
 
-  # تقييم لاعبي التشكيلة الحالية لتحديد الأضعف رياضياً
   for p in squad_objects:
     p["math_score"] = p["total_points"] + (p["form"] * 10)
 
@@ -243,8 +241,7 @@ def calculate_mathematical_optimal_transfers(squad_objects):
         p
         for p in non_owned_sorted
         if p.get("element_type") == sell_player["element_type"]
-        and round(p.get("now_cost", 0) / 10.0, 1)
-        <= sell_player["price"] + 1.5  # مراعاة الميزانية المتاحة
+        and round(p.get("now_cost", 0) / 10.0, 1) <= sell_player["price"] + 1.5
     ]
     if matching_replacements:
       buy_p = matching_replacements[0]
@@ -471,11 +468,12 @@ with tab2:
           for p in row:
             cap = " (C)" if p["is_captain"] else (" (V)" if p["is_vice"] else "")
             bc = "badge-green" if p["status"] == "a" else "badge-red"
-            st.markdown(
-                f'<div class="player-card {bc}">{p["name"]}{cap}<span>{p["team"]}</span><div'
-                f' class="price">£{p["price']}M</div></div>',
-                unsafe_allow_html=True,
+            player_card_html = (
+                f'<div class="player-card {bc}">{p["name"]}{cap}'
+                f'<span>{p["team"]}</span>'
+                f'<div class="price">£{p["price"]}M</div></div>'
             )
+            st.markdown(player_card_html, unsafe_allow_html=True)
           st.markdown("</div>", unsafe_allow_html=True)
       st.markdown("</div>", unsafe_allow_html=True)
       st.write(
@@ -488,7 +486,7 @@ with tab3:
       "🔄 تحليل التبديلات الذكية (نظام التحسين الرياضي متعدد المعايير)"
   )
   if not user_fpl_id:
-    st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى لعرض التبديلات.")
+    st.warning("⚠️ يرجى إدخال رقم FPL Team ID في الأعلى لعرض التبديلات.")
   else:
     if squad_err:
       st.error(squad_err)
