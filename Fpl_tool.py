@@ -222,6 +222,46 @@ def fetch_manager_squad(manager_id):
   return squad, None
 
 
+# خوارزمية بايثون الهجينة للتبديلات الموثوقة 100% (تمنع الهلوسة وتعطي البيانات الحقيقية للـ AI لتحليلها)
+def get_hybrid_transfer_candidates(squad_objects):
+  players, teams, _, _, _ = fetch_live_fpl_data()
+  if not players or not squad_objects:
+    return [], []
+
+  owned_ids = {p["id"] for p in squad_objects}
+  non_owned = [p for p in players.values() if p["id"] not in owned_ids]
+  for p in non_owned:
+    pts = int(p.get("total_points", 0) or 0)
+    form = float(p.get("form", "0.0") or 0.0)
+    p["math_score"] = pts + (form * 10)
+
+  non_owned_sorted = sorted(
+      non_owned, key=lambda x: x["math_score"], reverse=True
+  )
+  squad_sorted = sorted(squad_objects, key=lambda x: x["math_score"])
+
+  valid_suggestions = []
+  for i in range(min(2, len(squad_sorted))):
+    sell_p = squad_sorted[i]
+    matching = [
+        p
+        for p in non_owned_sorted
+        if p.get("element_type") == sell_p["element_type"]
+        and round(p.get("now_cost", 0) / 10.0, 1) <= sell_p["price"] + 1.5
+    ]
+    if matching:
+      buy_p = matching[0]
+      valid_suggestions.append({
+          "out_name": sell_p["name"],
+          "out_team": sell_p["team"],
+          "out_price": sell_p["price"],
+          "in_name": buy_p.get("web_name"),
+          "in_team": teams.get(buy_p.get("team"), "الدوري الإنجليزي"),
+          "in_price": round(buy_p.get("now_cost", 0) / 10.0, 1),
+      })
+  return squad_sorted, valid_suggestions
+
+
 @st.cache_data(ttl=3600)
 def fetch_price_changes_radar():
   players, teams, _, _, _ = fetch_live_fpl_data()
@@ -283,11 +323,11 @@ def fetch_injured_players_from_api():
 
 
 # ---------------------------------------------------------
-# الذكاء الاصطناعي للاستشارات وتحليل التبديلات بناءً على الخبراء
+# الذكاء الاصطناعي للاستشارات وتحليل التبديلات بلسان الخبراء
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
-أنت مستشار فانتسي محترف وخبير في تحليلات نخبة خبراء الفانتسي العرب والأجانب (مثل FPL Raptor, Let's Talk FPL, وغيرهم). 
-تقدم تحليلاً تكتيكياً دقيقاً ومبسطاً وتشرح دائماً الأسباب (لماذا) وراء كل مقترح تبديل أو خيار استراتيجي بناءً على البيانات الحية للسيرفر الرسمي.
+أنت مستشار فانتسي محترف وخبير عالمي وعربي (تستوحي آراء نخبة الخبراء مثل FPL Raptor و Let's Talk FPL). 
+دورك هو شرح الأسباب والتحليل التكتيكي للتبديلات الممررة لك بدقة شديدة، مستنداً إلى جدول المباريات والعوائد المتوقعة.
 """
 
 
@@ -298,8 +338,7 @@ def ask_openai(prompt_text, squad_context=""):
   try:
     client = OpenAI(api_key=api_key)
     query = (
-        f"تشكيلة المستخدم الرسمية من السيرفر:\n[{squad_context}]\n\nالطلب:"
-        f" {prompt_text}"
+        f"بيانات الفريق الرسمية:\n[{squad_context}]\n\nالطلب: {prompt_text}"
     )
     res = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -362,12 +401,10 @@ if user_fpl_id:
   squad_objects, squad_err = fetch_manager_squad(user_fpl_id)
   if squad_objects:
     current_squad_text = ", ".join([
-        f"{p['name']} ({p['pos']} - النادي: {p['team']} - £{p['price']}M - مؤشر"
-        f" الأداء: {p['math_score']})"
+        f"{p['name']} ({p['pos']} - النادي: {p['team']} - £{p['price']}M)"
         for p in squad_objects
     ])
 
-# تم دمج تبويب التبديلات مع التشكيلة المرئية وإضافة متابعة الدوريات لايف مع البونص
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 لوحة التحكم والدوريات الحية",
     "📊 التشكيلة المرئية وتحليل التبديلات",
@@ -442,12 +479,14 @@ with tab1:
                 " المباريات عبر سيرفر FPL."
             )
           else:
-                st.info("جاري تحميل ترتيب الدوري...")
+            st.info("جاري تحميل ترتيب الدوري...")
       else:
         st.info("لا توجد دوريات كلاسيكية مسجلة لهذا الفريق.")
 
 with tab2:
-  st.subheader("📊 التشكيلة المرئية وتحليل التبديلات (رأي الخبراء والذكاء الاصطناعي)")
+  st.subheader(
+      "📊 التشكيلة المرئية وتحليل التبديلات (توصيات الخبراء المبنية برمجياً)"
+  )
   if not user_fpl_id:
     st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى.")
   else:
@@ -478,16 +517,32 @@ with tab2:
       )
 
       st.markdown("---")
-      st.subheader("🔄 مقترحات التبديلات المستندة لخبراء الفانتسي (عرب وأجانب)")
-      if st.button("🤖 توليد تحليل وتوصيات التبديلات مع شرح الأسباب"):
-        if current_squad_text:
-          ai_transfer_advice = ask_openai(
-              "بناءً على توجهات ونقاشات خبراء الفانتسي النخبة (العرب والأجانب) وحالة اللاعبين الحالية، اقترح أفضل تبديلين (بيع و شراء) مع كتابة تحليل مبسط وشرح وافٍ (لماذا) تم اختيار هذا التبديل.",
-              squad_context=current_squad_text,
-          )
-          st.markdown(ai_transfer_advice)
+      st.subheader("🔄 مقترحات التبديلات الذكية والتحليل الشامل")
+      if st.button("🤖 عرض تحليلات الخبراء وأسباب التبديل"):
+        _, valid_transfers = get_hybrid_transfer_candidates(squad_objects)
+        if valid_transfers:
+          for idx, t in enumerate(valid_transfers, 1):
+            prompt_rationale = (
+                f"اشرح بلسان خبراء الفانتسي (عرب وأجانب) سبب التبديل التالي:"
+                f" بيع اللاعب {t['out_name']} ({t['out_team']} - £{t['out_price']}M)"
+                f" وشراء اللاعب {t['in_name']} ({t['in_team']} - £{t['in_price']}M)."
+                " قدم تحليلاً تكتيكياً ومبسطاً يوضح (لماذا) يعد هذا التبديل ممتازاً للجولة القادمة."
+            )
+            explanation = ask_openai(prompt_rationale, squad_context=current_squad_text)
+            st.markdown(
+                f"""
+                        <div class="transfer-box">
+                            <h4>مقترح تبديل خبير #{idx}</h4>
+                            <p>❌ <b>بيع (OUT):</b> {t['out_name']} ({t['out_team']} - £{t['out_price']}M)</p>
+                            <p>🟢 <b>شراء (IN):</b> {t['in_name']} ({t['in_team']} - £{t['in_price']}M)</p>
+                            <hr style="border-color: rgba(0,255,135,0.2);">
+                            <p><b>تحليل الخبير (لماذا؟):</b><br>{explanation}</p>
+                        </div>
+                        """,
+                unsafe_allow_html=True,
+            )
         else:
-          st.warning("تعذر قراءة بيانات التشكيلة.")
+          st.info("لا توجد مقترحات تبديل متاحة حالياً.")
 
 with tab3:
   st.subheader("👑 مستشار الكابتن الذكي")
