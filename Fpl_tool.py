@@ -149,6 +149,14 @@ def fetch_manager_info(manager_id):
 
 
 @st.cache_data(ttl=3600)
+def fetch_classic_league_standings(league_id):
+  data = get_json(
+      f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
+  )
+  return data if data and "standings" in data else None
+
+
+@st.cache_data(ttl=3600)
 def fetch_manager_squad(manager_id):
   players, teams, types, static_data, _ = fetch_live_fpl_data()
   if not players:
@@ -214,56 +222,6 @@ def fetch_manager_squad(manager_id):
   return squad, None
 
 
-# ---------------------------------------------------------
-# نظام التحسين الرياضي المتقدم (Mathematical Optimization Model)
-# ---------------------------------------------------------
-def calculate_mathematical_optimal_transfers(squad_objects):
-  players, teams, _, _, _ = fetch_live_fpl_data()
-  if not players or not squad_objects:
-    return []
-
-  owned_ids = {p["id"] for p in squad_objects}
-  suggestions = []
-
-  non_owned = [p for p in players.values() if p["id"] not in owned_ids]
-  for p in non_owned:
-    pts = int(p.get("total_points", 0) or 0)
-    form = float(p.get("form", "0.0") or 0.0)
-    p["math_score"] = pts + (form * 10)
-
-  non_owned_sorted = sorted(
-      non_owned, key=lambda x: x["math_score"], reverse=True
-  )
-
-  squad_sorted = sorted(squad_objects, key=lambda x: x["math_score"])
-
-  for i in range(min(2, len(squad_sorted))):
-    sell_player = squad_sorted[i]
-    matching_replacements = [
-        p
-        for p in non_owned_sorted
-        if p.get("element_type") == sell_player["element_type"]
-        and round(p.get("now_cost", 0) / 10.0, 1) <= sell_player["price"] + 1.5
-    ]
-    if matching_replacements:
-      buy_p = matching_replacements[0]
-      buy_name = buy_p.get("web_name")
-      buy_team = teams.get(buy_p.get("team"), "الدوري الإنجليزي")
-      buy_price = round(buy_p.get("now_cost", 0) / 10.0, 1)
-      buy_score = round(buy_p.get("math_score", 0), 1)
-
-      suggestions.append({
-          "out_name": sell_player["name"],
-          "out_team": sell_player["team"],
-          "out_price": sell_player["price"],
-          "in_name": buy_name,
-          "in_team": buy_team,
-          "in_price": buy_price,
-          "score": buy_score,
-      })
-  return suggestions
-
-
 @st.cache_data(ttl=3600)
 def fetch_price_changes_radar():
   players, teams, _, _, _ = fetch_live_fpl_data()
@@ -325,10 +283,11 @@ def fetch_injured_players_from_api():
 
 
 # ---------------------------------------------------------
-# الذكاء الاصطناعي للاستشارات فقط
+# الذكاء الاصطناعي للاستشارات وتحليل التبديلات بناءً على الخبراء
 # ---------------------------------------------------------
 SYSTEM_PROMPT = """
-أنت مستشار فانتسي محترف. التزم حصرياً بالبيانات الحقيقية الممررة لك من السيرفر الرسمي.
+أنت مستشار فانتسي محترف وخبير في تحليلات نخبة خبراء الفانتسي العرب والأجانب (مثل FPL Raptor, Let's Talk FPL, وغيرهم). 
+تقدم تحليلاً تكتيكياً دقيقاً ومبسطاً وتشرح دائماً الأسباب (لماذا) وراء كل مقترح تبديل أو خيار استراتيجي بناءً على البيانات الحية للسيرفر الرسمي.
 """
 
 
@@ -348,8 +307,8 @@ def ask_openai(prompt_text, squad_context=""):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": query},
         ],
-        temperature=0.1,
-        max_tokens=1000,
+        temperature=0.2,
+        max_tokens=1200,
     )
     return res.choices[0].message.content.strip()
   except Exception as e:
@@ -366,7 +325,8 @@ st.markdown(
 )
 st.markdown(
     "<p style='text-align: center; color: #b1c1d8; font-size: 15px; margin-top:"
-    " 5px;'>المنصة الذكية لإدارة وفحص فريق الفانتسي بالتحسين الرياضي</p>",
+    " 5px;'>المنصة الذكية لإدارة وفحص فريق الفانتسي مع متابعة الدوريات الحية"
+    " وبونص اللاعبين</p>",
     unsafe_allow_html=True,
 )
 
@@ -407,10 +367,10 @@ if user_fpl_id:
         for p in squad_objects
     ])
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
-    "🏠 لوحة التحكم",
-    "📊 التشكيلة المرئية",
-    "🔄 تحليل التبديلات",
+# تم دمج تبويب التبديلات مع التشكيلة المرئية وإضافة متابعة الدوريات لايف مع البونص
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    "🏠 لوحة التحكم والدوريات الحية",
+    "📊 التشكيلة المرئية وتحليل التبديلات",
     "👑 مستشار الكابتن",
     "💬 المساعد الذكي",
     "🚑 مرصد الإصابات",
@@ -420,7 +380,9 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
 ])
 
 with tab1:
-  st.subheader("🏠 لوحة التحكم الشخصية")
+  st.subheader(
+      "🏠 لوحة التحكم ومتابعة الدوريات الخاصة الحية (Live Standings & Bonus)"
+  )
   if not user_fpl_id:
     st.warning(
         "⚠️ يرجى إدخال رقم FPL Team ID الخاص بك في الأعلى (مثال: 123456)."
@@ -452,8 +414,40 @@ with tab1:
           unsafe_allow_html=True,
       )
 
+      st.markdown("---")
+      st.subheader("🏆 متابعة الدوريات الخاصة لايف (مع رصد النقاط وبونص الجولة)")
+      classic_leagues = entry.get("leagues", {}).get("classic", [])
+      if classic_leagues:
+        league_options = {lg["name"]: lg["id"] for lg in classic_leagues}
+        selected_league_name = st.selectbox(
+            "اختر الدوري الخاص للمتابعة الحية:", list(league_options.keys())
+        )
+        if selected_league_name:
+          chosen_league_id = league_options[selected_league_name]
+          standings_data = fetch_classic_league_standings(chosen_league_id)
+          if standings_data and "standings" in standings_data:
+            results = standings_data["standings"].get("results", [])
+            league_table = []
+            for row in results:
+              league_table.append({
+                  "الترتيب الحقيقي": row.get("rank"),
+                  "اسم المدرب": row.get("player_name"),
+                  "اسم الفريق": row.get("entry_name"),
+                  "نقاط الجولة الحية": row.get("event_total"),
+                  "إجمالي النقاط": row.get("total"),
+              })
+            st.table(league_table)
+            st.info(
+                "💡 يتم تحديث جدول الدوري الحيي ونقاط البونص تباعاً فور انتهاء"
+                " المباريات عبر سيرفر FPL."
+            )
+          else:
+                st.info("جاري تحميل ترتيب الدوري...")
+      else:
+        st.info("لا توجد دوريات كلاسيكية مسجلة لهذا الفريق.")
+
 with tab2:
-  st.subheader("📊 التشكيلة المرئية على الملعب")
+  st.subheader("📊 التشكيلة المرئية وتحليل التبديلات (رأي الخبراء والذكاء الاصطناعي)")
   if not user_fpl_id:
     st.warning("⚠️ أدخل رقم FPL Team ID في الأعلى.")
   else:
@@ -483,46 +477,32 @@ with tab2:
           + " | ".join([f"{p['name']} ({p['team']} - £{p['price']}M)" for p in bench])
       )
 
-with tab3:
-  st.subheader(
-      "🔄 تحليل التبديلات الذكية (نظام التحسين الرياضي متعدد المعايير)"
-  )
-  if not user_fpl_id:
-    st.warning("⚠️ يرجى إدخال رقم FPL Team ID في الأعلى لعرض التبديلات.")
-  else:
-    if squad_err:
-      st.error(squad_err)
-    elif squad_objects:
-      transfers = calculate_mathematical_optimal_transfers(squad_objects)
-      if transfers:
-        for idx, t in enumerate(transfers, 1):
-          st.markdown(
-              f"""
-                    <div class="transfer-box">
-                        <h4>مقترح التحسين الرياضي #{idx}</h4>
-                        <p>❌ <b>بيع (OUT):</b> {t['out_name']} ({t['out_team']} - £{t['out_price']}M)</p>
-                        <p>🟢 <b>شراء (IN):</b> {t['in_name']} ({t['in_team']} - £{t['in_price']}M) - مؤشر الأداء الرياضي: {t['score']}</p>
-                    </div>
-                    """,
-              unsafe_allow_html=True,
+      st.markdown("---")
+      st.subheader("🔄 مقترحات التبديلات المستندة لخبراء الفانتسي (عرب وأجانب)")
+      if st.button("🤖 توليد تحليل وتوصيات التبديلات مع شرح الأسباب"):
+        if current_squad_text:
+          ai_transfer_advice = ask_openai(
+              "بناءً على توجهات ونقاشات خبراء الفانتسي النخبة (العرب والأجانب) وحالة اللاعبين الحالية، اقترح أفضل تبديلين (بيع و شراء) مع كتابة تحليل مبسط وشرح وافٍ (لماذا) تم اختيار هذا التبديل.",
+              squad_context=current_squad_text,
           )
-      else:
-        st.info("لا توجد مقترحات تبديل مطابقة لمعايير التحسين حالياً.")
+          st.markdown(ai_transfer_advice)
+        else:
+          st.warning("تعذر قراءة بيانات التشكيلة.")
 
-with tab4:
+with tab3:
   st.subheader("👑 مستشار الكابتن الذكي")
   if st.button("اختر أفضل كابتن"):
     if current_squad_text:
       st.markdown(
           ask_openai(
-              "اختر أفضل مرشح لشارة الكابتن من تشكيلتي.",
+              "بناءً على توصيات خبراء الفانتسي، من هو أفضل مرشح لشارة الكابتن للجولة القادمة من تشكيلتي مع ذكر الأسباب؟",
               squad_context=current_squad_text,
           )
       )
     else:
       st.warning("أدخل رقم الفريق أولاً.")
 
-with tab5:
+with tab4:
   st.subheader("💬 المساعد الذكي")
   q = st.text_input("اطرح سؤالك الاستراتيجي...")
   if q:
@@ -532,7 +512,7 @@ with tab5:
         else "أدخل رقم فريقك."
     )
 
-with tab6:
+with tab5:
   st.subheader("🚑 مرصد الإصابات")
   inj = fetch_injured_players_from_api()
   if inj:
@@ -540,7 +520,7 @@ with tab6:
   else:
     st.success("لا توجد إصابات حالياً.")
 
-with tab7:
+with tab6:
   st.subheader("📈 رادار تغير الأسعار")
   rising, falling, teams_dict = fetch_price_changes_radar()
   col_r1, col_r2 = st.columns(2)
@@ -557,7 +537,7 @@ with tab7:
           f"- {p['web_name']} ({teams_dict.get(p.get('team'), '')} - £{p['now_cost']/10}M)"
       )
 
-with tab8:
+with tab7:
   st.subheader("💎 كاشف التفاضليين")
   diffs = fetch_differential_finders()
   if diffs:
@@ -565,7 +545,7 @@ with tab8:
   else:
     st.info("جاري التحميل...")
 
-with tab9:
+with tab8:
   st.subheader("🛡️ مؤشر الملكية EO")
   pn = st.text_input("اسم اللاعب لفحص خطورة عدم امتلاكه:")
   if pn and current_squad_text:
